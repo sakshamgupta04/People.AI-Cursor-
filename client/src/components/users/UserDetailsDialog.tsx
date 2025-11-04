@@ -8,6 +8,32 @@ import FitmentScoreGauge from "./FitmentScoreGauge";
 import { format } from "date-fns";
 import { toast } from "@/components/ui/use-toast";
 
+const RetentionRing = ({ label, value, color }: { label: string; value: number; color: string }) => {
+  const circumference = 2 * Math.PI * 42;
+  const offset = circumference - (value / 100) * circumference;
+  return (
+    <div className="flex flex-col items-center">
+      <svg width="100" height="100" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="42" stroke="#e5e7eb" strokeWidth="8" fill="none" />
+        <circle
+          cx="50"
+          cy="50"
+          r="42"
+          stroke={color}
+          strokeWidth="8"
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={offset}
+          transform="rotate(-90 50 50)"
+        />
+        <text x="50" y="52" textAnchor="middle" fontSize="14" fill="#111827">{value}%</text>
+      </svg>
+      <div className="mt-1 text-sm font-medium text-gray-800">{label}</div>
+    </div>
+  );
+};
+
 interface UserDetailsDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -22,9 +48,9 @@ export default function UserDetailsDialog({ isOpen, onClose, user }: UserDetails
       <DialogContent className="max-w-[70vw] w-[95vw] p-0 h-[90vh] overflow-hidden">
         <DialogHeader className="p-1 border-b sticky top-0 bg-white z-10">
           <DialogTitle className="flex items-center space-x-2">
-            <Button 
-              variant="ghost" 
-              size="icon" 
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={onClose}
               className="h-8 w-8"
             >
@@ -33,7 +59,7 @@ export default function UserDetailsDialog({ isOpen, onClose, user }: UserDetails
             <span>Candidate Profile</span>
           </DialogTitle>
         </DialogHeader>
-        
+
         <ScrollArea className="h-[calc(90vh-5rem)] w-full">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-0 p-8">
             <div className="space-y-8">
@@ -45,7 +71,7 @@ export default function UserDetailsDialog({ isOpen, onClose, user }: UserDetails
                     <span className="text-gray-400">Profile Image</span>
                   )}
                 </div>
-                
+
                 <div className="space-y-3 flex-1">
                   <h3 className="text-3xl font-semibold">{user.name}</h3>
                   <p className="text-gray-500 text-lg">{user.email}</p>
@@ -79,7 +105,7 @@ export default function UserDetailsDialog({ isOpen, onClose, user }: UserDetails
                 <div className="w-full max-w-[200px] mx-auto">
                   <FitmentScoreGauge score={user.score} />
                 </div>
-                
+
                 <div className="mt-3">
                   <h4 className="font-medium text-center mb-1 text-lg">Score Breakdown</h4>
                   <div className="space-y-1 px-5">
@@ -105,7 +131,7 @@ export default function UserDetailsDialog({ isOpen, onClose, user }: UserDetails
                   <div className="w-full h-[300px] max-w-[400px] mx-auto">
                     <PersonalityPieChart scores={user.personalityScores} />
                   </div>
-                  
+
                   <div className="mt-6 space-y-2 max-w-md mx-auto">
                     <div className="flex justify-between text-sm">
                       <span>Extroversion</span>
@@ -127,39 +153,60 @@ export default function UserDetailsDialog({ isOpen, onClose, user }: UserDetails
                       <span>Conscientiousness</span>
                       <span>{user.personalityScores.conscientiousness}%</span>
                     </div>
-                    
-                    <Button 
-                      onClick={() => {
-                        if (user.file_url) {
-                          // Fix the URL to prevent duplicate 'api' in the path
-                          let resumeUrl;
-                          if (user.file_url.startsWith('http')) {
-                            // If it's already a full URL, check for duplicate 'api'
-                            resumeUrl = user.file_url.replace('/api/api/', '/api/');
-                          } else {
-                            // For relative URLs, ensure proper formatting
-                            resumeUrl = `${window.location.origin}${user.file_url.startsWith('/') ? '' : '/'}${user.file_url}`;
-                          }
-                          window.open(resumeUrl, '_blank', 'noopener,noreferrer');
-                        } else {
-                          toast({
-                            title: "Resume not available",
-                            description: "This user doesn't have a resume uploaded.",
-                            variant: "destructive"
-                          });
-                        }
-                      }} 
-                      className="w-full mt-6 bg-blue-500 hover:bg-blue-600 text-white"
-                      disabled={!user.file_url}
-                    >
-                      {user.file_url ? "View Resume" : "No Resume Available"}
-                    </Button>
+
                   </div>
                 </div>
               )}
+
+              {/* Retention Analysis */}
+              <div className="bg-white rounded-lg border border-gray-200 p-2 shadow-sm space-y-3">
+                <h4 className="text-2xl font-semibold text-center">Retention Analysis</h4>
+                <div className="grid grid-cols-3 gap-6 place-items-center">
+                  <div className="text-center">
+                    <div className="text-sm text-gray-500 mb-2">4 weeks</div>
+                    <RetentionRing label="Possible" value={80} color="#f59e0b" />
+                  </div>
+                  <div className="text-center">
+                    <div className="text-sm text-gray-500 mb-2">8 weeks</div>
+                    <RetentionRing label="Likely" value={88} color="#22c55e" />
+                  </div>
+                  <div className="text-center">
+                    <div className="text-sm text-gray-500 mb-2">12 weeks</div>
+                    <RetentionRing label="Yes" value={96} color="#16a34a" />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </ScrollArea>
+        <div className="p-4 border-t bg-white flex justify-center">
+          <Button
+            onClick={() => {
+              const base = window.location.origin;
+              if (user.id) {
+                const url = `${base}/api/resumes/${user.id}/file`;
+                window.open(url, '_blank', 'noopener,noreferrer');
+                return;
+              }
+              if (user.file_url) {
+                const resumeUrl = user.file_url.startsWith('http')
+                  ? user.file_url.replace('/api/api/', '/api/')
+                  : `${base}${user.file_url.startsWith('/') ? '' : '/'}${user.file_url}`;
+                window.open(resumeUrl, '_blank', 'noopener,noreferrer');
+              } else {
+                toast({
+                  title: "Resume not available",
+                  description: "This user doesn't have a resume uploaded.",
+                  variant: "destructive"
+                });
+              }
+            }}
+            className="w-full max-w-md bg-blue-500 hover:bg-blue-600 text-white"
+            disabled={!user.id && !user.file_url}
+          >
+            {user.id || user.file_url ? "View Resume" : "No Resume Available"}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

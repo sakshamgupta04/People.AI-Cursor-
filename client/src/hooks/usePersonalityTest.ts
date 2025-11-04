@@ -31,19 +31,19 @@ const extractEmail = (text: string): string | null => {
   // Check if it's a hyperlink with mailto:
   const mailtoRegex = /mailto:([^"'?]+)/i;
   const mailtoMatch = text.match(mailtoRegex);
-  
+
   if (mailtoMatch && mailtoMatch[1]) {
     return mailtoMatch[1];
   }
-  
+
   // Regular expression for matching email addresses in text
   const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/gi;
   const emailMatch = text.match(emailRegex);
-  
+
   if (emailMatch && emailMatch.length > 0) {
     return emailMatch[0];
   }
-  
+
   return null;
 };
 
@@ -55,7 +55,7 @@ export function usePersonalityTest() {
   const submitTestResults = async (results: TestResults) => {
     try {
       setIsSubmitting(true);
-      
+
       // Calculate the overall fitment score if not provided
       if (!results.fitmentScore) {
         const scores = Object.values(results.personalityScores);
@@ -64,7 +64,7 @@ export function usePersonalityTest() {
 
       // Replace this with your own submission logic
       console.log('Would submit test results:', results);
-      
+
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -73,20 +73,20 @@ export function usePersonalityTest() {
         title: "Test submitted successfully",
         description: "Your personality test results have been recorded.",
       });
-      
+
       // Also show a toast message using sonner
       sonnerToast.success("Test submitted successfully");
-      
+
       return true;
     } catch (error) {
       console.error('Error submitting test results:', error);
-      
+
       toast({
         title: "Failed to submit test",
         description: "Please try again later.",
         variant: "destructive"
       });
-      
+
       sonnerToast.error("Failed to submit test");
       return false;
     } finally {
@@ -97,12 +97,12 @@ export function usePersonalityTest() {
   const sendTestInvite = async ({ email, emailText, name }: InviteParams) => {
     try {
       setIsSending(true);
-      
+
       // Determine the appropriate test URL based on current environment
-      // In production, this should be the Vercel deployment URL for Big5
-      const baseUrl = import.meta.env.VITE_BIG5_TEST_URL || window.location.origin;
+      // Prefer explicit Big5 app URL; fallback to local Big5 dev server
+      const baseUrl = (import.meta.env.VITE_BIG5_TEST_URL || 'http://localhost:5173').replace(/\/$/, '');
       const personalityTestUrl = `${baseUrl}/?email=${encodeURIComponent(email || '')}`;
-      
+
       // If emailText is provided, try to extract email from it
       let candidateEmail = email;
       if (emailText && !email) {
@@ -113,14 +113,14 @@ export function usePersonalityTest() {
           throw new Error("Could not extract a valid email address");
         }
       }
-      
+
       if (!candidateEmail) {
         throw new Error("No valid email provided");
       }
 
       // Import and use the email service
       const { sendPersonalityTestEmail } = await import('@/services/emailService');
-      
+
       const result = await sendPersonalityTestEmail({
         email: candidateEmail,
         name: name || candidateEmail,
@@ -136,20 +136,20 @@ export function usePersonalityTest() {
         title: "Invitation sent",
         description: `A personality test invitation has been sent to ${candidateEmail}.`,
       });
-      
+
       sonnerToast.success("Invitation sent successfully");
       return true;
     } catch (error) {
       console.error('Error sending test invitation:', error);
-      
+
       const errorMessage = error instanceof Error ? error.message : 'Failed to send invitation';
-      
+
       toast({
         title: "Failed to send invitation",
         description: errorMessage,
         variant: "destructive"
       });
-      
+
       sonnerToast.error(errorMessage);
       return false;
     } finally {

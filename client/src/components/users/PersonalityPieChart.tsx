@@ -36,15 +36,15 @@ export default function PersonalityPieChart({ scores }: PersonalityPieChartProps
             innerRadius={60}
             fill="#8884d8"
             dataKey="value"
-            label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+            label={({ value }) => `${value}%`}
             paddingAngle={2}
           >
             {data.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={entry.color} strokeWidth={2} />
             ))}
           </Pie>
-          <Tooltip 
-            formatter={(value) => `${value}%`} 
+          <Tooltip
+            formatter={(value) => `${value}%`}
             contentStyle={{ borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
             itemStyle={{ color: "#333" }}
           />

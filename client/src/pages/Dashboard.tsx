@@ -12,8 +12,8 @@ import InterviewScheduleDialog from "@/components/dashboard/InterviewScheduleDia
 import { DashboardStats, Candidate, Interview } from "@/types/dashboard";
 
 // Use production API URL in production environment, otherwise use development URL
-const API_BASE_URL = import.meta.env.PROD 
-  ? import.meta.env.VITE_PROD_API_BASE_URL 
+const API_BASE_URL = import.meta.env.PROD
+  ? import.meta.env.VITE_PROD_API_BASE_URL
   : import.meta.env.VITE_DEV_API_BASE_URL || 'http://localhost:5000/api';
 
 const vacancyData = [
@@ -32,9 +32,9 @@ const vacancyData = [
 ];
 
 const candidates = [
-  { 
-    name: "Saksham Gupta", 
-    email: "2022a6041@mietjammu.in", 
+  {
+    name: "Saksham Gupta",
+    email: "2022a6041@mietjammu.in",
     fitmentScore: 65.5,
     phone: "+91 9876543210",
     education: "Ph.D. in Computer Science",
@@ -45,9 +45,9 @@ const candidates = [
     location: "Jammu",
     longevityScore: 85
   },
-  { 
-    name: "Ayush Thakur", 
-    email: "ayushthakur1412@gmail.com", 
+  {
+    name: "Ayush Thakur",
+    email: "ayushthakur1412@gmail.com",
     fitment_score: 69.94,
     phone: "+91 9876543211",
     education: "Master of Computer Science",
@@ -58,9 +58,9 @@ const candidates = [
     location: "Delhi",
     longevity_score: 78
   },
-  { 
-    name: "Adishwar Sharma", 
-    email: "2021a1045@mietjammu.in", 
+  {
+    name: "Adishwar Sharma",
+    email: "2021a1045@mietjammu.in",
     fitment_score: 72.58,
     phone: "+91 9876543212",
     education: "Ph.D. in AI",
@@ -71,9 +71,9 @@ const candidates = [
     location: "Bangalore",
     longevityScore: 92
   },
-  { 
-    name: "Garima Saigal", 
-    email: "garimasaigal02@gmail.com", 
+  {
+    name: "Garima Saigal",
+    email: "garimasaigal02@gmail.com",
     fitmentScore: 55.32,
     phone: "+91 9876543213",
     education: "M.Tech in Software Engineering",
@@ -84,9 +84,9 @@ const candidates = [
     location: "Mumbai",
     longevityScore: 65
   },
-  { 
-    name: "Aarush Wali", 
-    email: "2022A6002@mietjammu.in", 
+  {
+    name: "Aarush Wali",
+    email: "2022A6002@mietjammu.in",
     fitmentScore: 62.45,
     phone: "+91 9876543214",
     education: "M.Sc. in AI",
@@ -212,7 +212,7 @@ export default function Dashboard() {
         const totalApplications = resumesRes.data?.pagination?.total || 0;
         const todayInterviews = interviewsRes.data?.data?.length || 0;
         const jobsData = jobsRes.data?.data || [];
-        
+
         // Calculate statistics
         const hiredCandidates = resumesData.filter(
           (r: any) => r.status === 'hired' || r.status === 'accepted'
@@ -230,14 +230,27 @@ export default function Dashboard() {
           todayInterviews
         });
 
+        // Notify on new candidates since last visit
+        try {
+          const key = 'lastResumeCount';
+          const prev = Number(localStorage.getItem(key) || '0');
+          if (!Number.isNaN(prev) && totalApplications > prev) {
+            const delta = totalApplications - prev;
+            if (delta > 0) {
+              toast.success(`${delta} new candidate${delta > 1 ? 's' : ''} registered since your last visit`);
+            }
+          }
+          localStorage.setItem(key, String(totalApplications));
+        } catch { }
+
         // Process candidates for the CandidateScores component
         const formattedCandidates = resumesData.map((resume: any) => {
           // Use fitment_score from API if available, otherwise use 0
           // The API should calculate this on the backend based on resume analysis
-          const fitmentScore = typeof resume.fitment_score === 'number' 
+          const fitmentScore = typeof resume.fitment_score === 'number'
             ? Math.min(100, Math.max(0, resume.fitment_score))
             : 0; // Default to 0 if not provided by API
-          
+
           return {
             id: resume.id || '',
             name: resume.name || resume.candidate_name || 'Unknown Candidate',
@@ -254,16 +267,16 @@ export default function Dashboard() {
             status: resume.status || 'pending'
           };
         });
-        
+
         setCandidates(formattedCandidates);
-        
+
         // Process job roles from jobs data
         const jobRoles = Array.from(new Set(
           jobsData
             .map((job: any) => job.title || job.role || job.department)
             .filter(Boolean)
         )).slice(0, 10); // Limit to 10 roles max
-        
+
         // If no job roles from jobs, try to get from resumes
         if (jobRoles.length === 0) {
           const resumeJobRoles = Array.from(new Set(
@@ -271,12 +284,12 @@ export default function Dashboard() {
               .map((r: any) => r.expected_role || r.best_fit_for)
               .filter(Boolean)
           )).slice(0, 10);
-          
+
           setJobRoles(resumeJobRoles as string[]);
         } else {
           setJobRoles(jobRoles as string[]);
         }
-        
+
         // Process interviews for the interview dialog
         const interviewsData = interviewsRes.data?.data || [];
         const formattedInterviews = interviewsData.map((i: any) => ({
@@ -290,15 +303,15 @@ export default function Dashboard() {
           meetingPlatform: i.meeting_platform || '',
           description: i.description || ''
         }));
-        
+
         setInterviews(formattedInterviews);
 
         // Process interviews
         if (interviewsRes.data?.data) {
-          const interviewsData = Array.isArray(interviewsRes.data.data) 
-            ? interviewsRes.data.data 
+          const interviewsData = Array.isArray(interviewsRes.data.data)
+            ? interviewsRes.data.data
             : [interviewsRes.data.data];
-          
+
           const formattedInterviews = interviewsData.map((i: any) => ({
             id: i.id || '',
             title: i.title || 'Interview',
@@ -310,7 +323,7 @@ export default function Dashboard() {
             meetingPlatform: i.meeting_platform || '',
             description: i.description || ''
           }));
-          
+
           setInterviews(formattedInterviews);
         }
 
@@ -356,31 +369,31 @@ export default function Dashboard() {
   return (
     <div className="page-container bg-white text-gray-800">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard 
+        <StatCard
           value={stats.totalApplications.toString()}
           title="Job Applications"
           icon={<Users size={40} className="text-white" />}
           color="purple"
           className="shadow-md"
         />
-        
-        <StatCard 
+
+        <StatCard
           value={stats.hiredCandidates.toString()}
           title="Hired Candidates"
           icon={<Briefcase size={40} className="text-white" />}
           color="blue"
           className="relative overflow-hidden shadow-md"
         />
-        
-        <StatCard 
+
+        <StatCard
           value={stats.pendingResumes.toString()}
           title="Resumes for Review"
           icon={<FileText size={40} className="text-white" />}
           color="green"
           className="shadow-md"
         />
-        
-        <StatCard 
+
+        <StatCard
           value={stats.todayInterviews.toString()}
           title="Scheduled Interviews For Today"
           icon={<Calendar size={40} className="text-blue" />}
@@ -389,10 +402,10 @@ export default function Dashboard() {
           className="cursor-pointer hover:bg-gray-100 transition-colors shadow-md"
         />
       </div>
-      
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <div className="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200 h-full">
-          <JobFitmentTable 
+          <JobFitmentTable
             jobRoles={jobRoles}
             fitCategories={['Best Fit', 'Mid Fit', 'Not Fit']}
             employees={candidates.map(c => ({
@@ -413,8 +426,8 @@ export default function Dashboard() {
         <CandidateStatus approvedCount={45} reviewCount={30} rejectedCount={25} />
       </div> */}
 
-      <InterviewScheduleDialog 
-        isOpen={showInterviews} 
+      <InterviewScheduleDialog
+        isOpen={showInterviews}
         onClose={() => setShowInterviews(false)}
         interviews={interviews}
         isLoading={loading}

@@ -23,6 +23,7 @@
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.9.14",
     "multer": "^2.0.0",
     "node-fetch": "^2.7.0",
     "resend": "^6.4.0",

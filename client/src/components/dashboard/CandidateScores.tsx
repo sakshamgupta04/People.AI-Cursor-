@@ -27,7 +27,7 @@
 
 // export default function CandidateScores({ candidates, onViewUser }: CandidateScoresProps) {
 //   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
-  
+
 //   const handleCandidateClick = (candidate: Candidate) => {
 //     if (onViewUser) {
 //       onViewUser(candidate);
@@ -107,9 +107,7 @@
 
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import CandidateDetailsDialog from "./CandidateDetailsDialog";
+import { Link, useNavigate } from "react-router-dom";
 
 export interface Candidate {
   id: string;
@@ -132,13 +130,13 @@ interface CandidateScoresProps {
 }
 
 export default function CandidateScores({ candidates, onViewUser }: CandidateScoresProps) {
-  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
-  
+  const navigate = useNavigate();
+
   const handleCandidateClick = (candidate: Candidate) => {
-    if (onViewUser) {
+    if (candidate.id) {
+      navigate(`/users?selected=${candidate.id}`);
+    } else if (onViewUser) {
       onViewUser(candidate);
-    } else {
-      setSelectedCandidate(candidate);
     }
   };
 
@@ -174,11 +172,10 @@ export default function CandidateScores({ candidates, onViewUser }: CandidateSco
                 <p className="text-sm text-gray-500">{candidate.email}</p>
               </div>
               <div
-                className={`text-lg font-semibold ${
-                  candidate.fitment_score >= 60
-                    ? "text-green-600"
-                    : "text-yellow-600"
-                }`}
+                className={`text-lg font-semibold ${candidate.fitment_score >= 60
+                  ? "text-green-600"
+                  : "text-yellow-600"
+                  }`}
               >
                 {candidate.fitment_score.toFixed(1)}%
               </div>
@@ -187,23 +184,16 @@ export default function CandidateScores({ candidates, onViewUser }: CandidateSco
             {/* Progress Bar */}
             <div className="mt-2 w-full rounded-full h-2.5 bg-gray-100">
               <div
-                className={`h-2.5 rounded-full ${
-                  candidate.fitment_score >= 60
-                    ? "bg-green-500"
-                    : "bg-yellow-500"
-                }`}
+                className={`h-2.5 rounded-full ${candidate.fitment_score >= 60
+                  ? "bg-green-500"
+                  : "bg-yellow-500"
+                  }`}
                 style={{ width: `${candidate.fitment_score}%` }}
               ></div>
             </div>
           </div>
         ))}
       </div>
-
-      <CandidateDetailsDialog
-        isOpen={!!selectedCandidate}
-        onClose={() => setSelectedCandidate(null)}
-        candidate={selectedCandidate}
-      />
     </div>
   );
 }

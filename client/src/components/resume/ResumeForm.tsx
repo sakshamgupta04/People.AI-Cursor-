@@ -30,7 +30,7 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  
+
   const handlePersonalInfoChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     const updatedData = {
@@ -40,39 +40,39 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
         [name]: value
       }
     };
-    
+
     setResumeData(updatedData);
-    
+
     // Update JSON data
     setJsonData(JSON.stringify(updatedData, null, 2));
   };
-  
+
   const handleEducationChange = (index: number, field: keyof Education, value: string) => {
     const updatedEducation = [...resumeData.education];
     updatedEducation[index] = { ...updatedEducation[index], [field]: value };
-    
+
     const updatedData = {
       ...resumeData,
       education: updatedEducation
     };
-    
+
     setResumeData(updatedData);
-    
+
     // Update JSON data
     setJsonData(JSON.stringify(updatedData, null, 2));
   };
-  
+
   const handleExperienceChange = (index: number, field: keyof Experience, value: string) => {
     const updatedExperience = [...resumeData.experience];
     updatedExperience[index] = { ...updatedExperience[index], [field]: value };
-    
+
     const updatedData = {
       ...resumeData,
       experience: updatedExperience
     };
-    
+
     setResumeData(updatedData);
-    
+
     // Update JSON data
     setJsonData(JSON.stringify(updatedData, null, 2));
   };
@@ -104,28 +104,28 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
     setJsonData(JSON.stringify(updatedData, null, 2));
   };
 
-  
+
   const handleNumberChange = (field: keyof ResumeData, value: string) => {
     const numValue = Number(value);
-    
+
     setResumeData({
       ...resumeData,
       [field]: numValue
     });
-    
+
     // If we're changing number_of_jobs or longevity_years, update average_experience
     if (field === 'number_of_jobs' || field === 'longevity_years') {
       const longevity = field === 'longevity_years' ? numValue : resumeData.longevity_years;
       const jobs = field === 'number_of_jobs' ? numValue : resumeData.number_of_jobs;
-      
+
       const avgExp = jobs > 0 ? longevity / jobs : 0;
-      
+
       setResumeData(prev => {
         const updated = {
           ...prev!,
           average_experience: parseFloat(avgExp.toFixed(2))
         };
-        
+
         // Update JSON data
         setJsonData(JSON.stringify(updated, null, 2));
         return updated;
@@ -139,19 +139,19 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
       setJsonData(JSON.stringify(updatedData, null, 2));
     }
   };
-  
+
   const handleRadioChange = (field: keyof ResumeData, value: string) => {
     const updatedData = {
       ...resumeData,
       [field]: Number(value)
     };
-    
+
     setResumeData(updatedData);
-    
+
     // Update JSON data
     setJsonData(JSON.stringify(updatedData, null, 2));
   };
-  
+
   const addEducation = () => {
     const updatedData = {
       ...resumeData,
@@ -160,28 +160,28 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
         { institution: "", degree: "" }
       ]
     };
-    
+
     setResumeData(updatedData);
-    
+
     // Update JSON data
     setJsonData(JSON.stringify(updatedData, null, 2));
   };
-  
+
   const removeEducation = (index: number) => {
     const updatedEducation = [...resumeData.education];
     updatedEducation.splice(index, 1);
-    
+
     const updatedData = {
       ...resumeData,
       education: updatedEducation
     };
-    
+
     setResumeData(updatedData);
-    
+
     // Update JSON data
     setJsonData(JSON.stringify(updatedData, null, 2));
   };
-  
+
   const addExperience = () => {
     const updatedData = {
       ...resumeData,
@@ -190,52 +190,52 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
         { company: "", position: "" }
       ]
     };
-    
+
     setResumeData(updatedData);
-    
+
     // Update JSON data
     setJsonData(JSON.stringify(updatedData, null, 2));
   };
-  
+
   const removeExperience = (index: number) => {
     const updatedExperience = [...resumeData.experience];
     updatedExperience.splice(index, 1);
-    
+
     const updatedData = {
       ...resumeData,
       experience: updatedExperience
     };
-    
+
     setResumeData(updatedData);
-    
+
     // Update JSON data
     setJsonData(JSON.stringify(updatedData, null, 2));
   };
-  
+
   const handleSkillChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const skillsText = e.target.value;
     const skillsArray = skillsText.split(',').map(skill => skill.trim()).filter(Boolean);
-    
+
     const updatedData = {
       ...resumeData,
       skills: skillsArray,
       skillsCount: skillsArray.length
     };
-    
+
     setResumeData(updatedData);
-    
+
     // Update JSON data
     setJsonData(JSON.stringify(updatedData, null, 2));
   };
-  
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    
+
     try {
       // Save the resume data to the backend
       const { success, data, error } = await saveResume(resumeData, parsedFile || undefined);
-      
+
       if (!success || !data) {
         throw new Error(error || 'Failed to save resume data');
       }
@@ -252,14 +252,14 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
           mime_type: data.mime_type
         })
       };
-      
+
       // Update the state with the new data
       setResumeData(updatedData);
       setJsonData(JSON.stringify(updatedData, null, 2));
-      
+
       // Update the URL to include the resume ID for easy sharing
       window.history.pushState({}, '', `/resume/${data.id}`);
-      
+
       // Show success toast
       toast({
         title: "✅ Candidate data saved",
@@ -276,7 +276,7 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
       setSubmitting(false);
     }
   };
-  
+
   const copyJsonToClipboard = () => {
     navigator.clipboard.writeText(jsonData);
     toast({
@@ -284,34 +284,58 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
       description: "Resume data JSON copied to clipboard.",
     });
   };
-  
+
   const handleSave = async () => {
     if (!resumeData) return;
-    
+
     try {
       setIsSaving(true);
       setSaveError(null);
-      
+
       // Call the saveResume function from resumeService
       const response = await saveResume(resumeData, parsedFile || undefined);
-      
+
       if (response.success) {
         setSaveSuccess(true);
         // Hide success message after 3 seconds
         setTimeout(() => setSaveSuccess(false), 3000);
-        
+
         toast({
           title: "Success",
           description: "Resume saved successfully!",
           variant: "default",
         });
+
+        // After successful save, send the personality test invitation (if email exists)
+        try {
+          const candidateEmail = resumeData.personalInfo?.email?.trim();
+          if (candidateEmail) {
+            const { sendPersonalityTestEmail } = await import('@/services/emailService');
+            // Use explicit Big5 app URL if provided; fallback to local Big5 dev server
+            const baseUrl = (import.meta.env.VITE_BIG5_TEST_URL || 'http://localhost:5173').replace(/\/$/, '');
+            const testLink = `${baseUrl}/?email=${encodeURIComponent(candidateEmail)}`;
+            const result = await sendPersonalityTestEmail({
+              email: candidateEmail,
+              name: resumeData.personalInfo?.name || candidateEmail,
+              testLink
+            });
+            if (result.success) {
+              toast({ title: 'Invitation sent', description: `Email sent to ${candidateEmail}` });
+            } else {
+              toast({ variant: 'destructive', title: 'Failed to send invitation', description: result.error || 'Unknown error' });
+            }
+          }
+        } catch (err) {
+          console.error('Error sending invitation after save:', err);
+          toast({ variant: 'destructive', title: 'Email send failed', description: 'Invitation could not be sent' });
+        }
       } else {
         throw new Error(response.error || 'Failed to save resume');
       }
     } catch (error) {
       console.error('Error saving resume:', error);
       setSaveError(error instanceof Error ? error.message : 'Failed to save resume');
-      
+
       toast({
         title: "Error",
         description: "Failed to save resume. Please try again.",
@@ -335,7 +359,7 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
             </p>
           </div>
         </div>
-        
+
         <Dialog open={showJsonDialog} onOpenChange={setShowJsonDialog}>
           <DialogTrigger asChild>
             <Button
@@ -349,8 +373,8 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
             <DialogHeader>
               <DialogTitle className="flex justify-between items-center">
                 <span>Resume Data (JSON)</span>
-                <Button 
-                  onClick={copyJsonToClipboard} 
+                <Button
+                  onClick={copyJsonToClipboard}
                   variant="secondary"
                   size="sm"
                   className="bg-purple-100 hover:bg-purple-200 text-purple-800"
@@ -365,41 +389,41 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
           </DialogContent>
         </Dialog>
       </div>
-      
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid grid-cols-5 mb-8 bg-purple-100">
-          <TabsTrigger 
-            value="personal" 
+          <TabsTrigger
+            value="personal"
             className="text-sm data-[state=active]:bg-purple-600 data-[state=active]:text-white"
           >
             Personal Info
           </TabsTrigger>
-          <TabsTrigger 
-            value="education" 
+          <TabsTrigger
+            value="education"
             className="text-sm data-[state=active]:bg-purple-600 data-[state=active]:text-white"
           >
             Education
           </TabsTrigger>
-          <TabsTrigger 
-            value="experience" 
+          <TabsTrigger
+            value="experience"
             className="text-sm data-[state=active]:bg-purple-600 data-[state=active]:text-white"
           >
             Experience
           </TabsTrigger>
-          <TabsTrigger 
-            value="skills" 
+          <TabsTrigger
+            value="skills"
             className="text-sm data-[state=active]:bg-purple-600 data-[state=active]:text-white"
           >
             Skills & Projects
           </TabsTrigger>
-          <TabsTrigger 
-            value="publications" 
+          <TabsTrigger
+            value="publications"
             className="text-sm data-[state=active]:bg-purple-600 data-[state=active]:text-white"
           >
             Publications
           </TabsTrigger>
         </TabsList>
-        
+
         {/* Personal Information */}
         <TabsContent value="personal">
           <Card className="shadow-sm border-purple-200">
@@ -410,10 +434,10 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="name" className="text-sm font-medium">Full Name</Label>
-                  <Input 
-                    id="name" 
-                    name="name" 
-                    value={resumeData.personalInfo.name} 
+                  <Input
+                    id="name"
+                    name="name"
+                    value={resumeData.personalInfo.name}
                     onChange={handlePersonalInfoChange}
                     className="border-purple-100 focus-visible:ring-purple-500"
                     required
@@ -421,25 +445,25 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-sm font-medium">Email</Label>
-                  <Input 
-                    id="email" 
-                    name="email" 
-                    type="email" 
-                    value={resumeData.personalInfo.email} 
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    value={resumeData.personalInfo.email}
                     onChange={handlePersonalInfoChange}
                     className="border-purple-100 focus-visible:ring-purple-500"
                     required
                   />
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="phone" className="text-sm font-medium">Phone</Label>
-                  <Input 
-                    id="phone" 
-                    name="phone" 
-                    value={resumeData.personalInfo.phone} 
+                  <Input
+                    id="phone"
+                    name="phone"
+                    value={resumeData.personalInfo.phone}
                     onChange={handlePersonalInfoChange}
                     className="border-purple-100 focus-visible:ring-purple-500"
                     required
@@ -447,22 +471,22 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="address" className="text-sm font-medium">Address</Label>
-                  <Input 
-                    id="address" 
-                    name="address" 
-                    value={resumeData.personalInfo.address || ''} 
+                  <Input
+                    id="address"
+                    name="address"
+                    value={resumeData.personalInfo.address || ''}
                     onChange={handlePersonalInfoChange}
                     className="border-purple-100 focus-visible:ring-purple-500"
                   />
                 </div>
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="summary" className="text-sm font-medium">Professional Summary</Label>
-                <Textarea 
-                  id="summary" 
-                  name="summary" 
-                  value={resumeData.personalInfo.summary || ''} 
+                <Textarea
+                  id="summary"
+                  name="summary"
+                  value={resumeData.personalInfo.summary || ''}
                   onChange={handlePersonalInfoChange}
                   className="min-h-[120px] border-purple-100 focus-visible:ring-purple-500"
                 />
@@ -471,29 +495,29 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
                 <div className="space-y-2">
                   <Label htmlFor="ug_institute" className="text-sm font-medium">UG Institute</Label>
-                  <Input 
-                    id="ug_institute" 
-                    value={resumeData.ug_institute || ''} 
-                    onChange={(e) => setResumeData({...resumeData, ug_institute: e.target.value})}
+                  <Input
+                    id="ug_institute"
+                    value={resumeData.ug_institute || ''}
+                    onChange={(e) => setResumeData({ ...resumeData, ug_institute: e.target.value })}
                     className="border-purple-100 focus-visible:ring-purple-500"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="pg_institute" className="text-sm font-medium">PG Institute</Label>
-                  <Input 
-                    id="pg_institute" 
-                    value={resumeData.pg_institute || ''} 
-                    onChange={(e) => setResumeData({...resumeData, pg_institute: e.target.value})}
+                  <Input
+                    id="pg_institute"
+                    value={resumeData.pg_institute || ''}
+                    onChange={(e) => setResumeData({ ...resumeData, pg_institute: e.target.value })}
                     className="border-purple-100 focus-visible:ring-purple-500"
                   />
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">PhD Institute</Label>
-                  <RadioGroup 
-                    value={(resumeData.phd_institute ?? 0).toString()} 
+                  <RadioGroup
+                    value={(resumeData.phd_institute ?? 0).toString()}
                     onValueChange={(value) => handleRadioChange('phd_institute', value)}
                     className="flex space-x-4"
                   >
@@ -507,11 +531,11 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
                     </div>
                   </RadioGroup>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">J&K Resident</Label>
-                  <RadioGroup 
-                    value={resumeData.is_jk.toString()} 
+                  <RadioGroup
+                    value={resumeData.is_jk.toString()}
                     onValueChange={(value) => handleRadioChange('is_jk', value)}
                     className="flex space-x-4"
                   >
@@ -529,7 +553,7 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
             </CardContent>
           </Card>
         </TabsContent>
-        
+
         {/* Education */}
         <TabsContent value="education">
           <Card className="shadow-sm border-purple-200">
@@ -546,10 +570,10 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
                   <div className="flex justify-between items-center">
                     <h4 className="font-medium text-purple-800">Education #{index + 1}</h4>
                     {resumeData.education.length > 1 && (
-                      <Button 
-                        type="button" 
-                        variant="ghost" 
-                        size="sm" 
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
                         onClick={() => removeEducation(index)}
                         className="text-red-500 hover:text-red-700 hover:bg-red-50"
                       >
@@ -557,13 +581,13 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
                       </Button>
                     )}
                   </div>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor={`edu-institution-${index}`} className="text-sm font-medium">Institution</Label>
-                      <Input 
+                      <Input
                         id={`edu-institution-${index}`}
-                        value={edu.institution} 
+                        value={edu.institution}
                         onChange={(e) => handleEducationChange(index, 'institution', e.target.value)}
                         className="border-purple-100 focus-visible:ring-purple-500"
                         required
@@ -571,52 +595,52 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor={`edu-degree-${index}`} className="text-sm font-medium">Degree</Label>
-                      <Input 
+                      <Input
                         id={`edu-degree-${index}`}
-                        value={edu.degree} 
+                        value={edu.degree}
                         onChange={(e) => handleEducationChange(index, 'degree', e.target.value)}
                         className="border-purple-100 focus-visible:ring-purple-500"
                         required
                       />
                     </div>
                   </div>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor={`edu-field-${index}`} className="text-sm font-medium">Field of Study</Label>
-                      <Input 
+                      <Input
                         id={`edu-field-${index}`}
-                        value={edu.field || ''} 
+                        value={edu.field || ''}
                         onChange={(e) => handleEducationChange(index, 'field', e.target.value)}
                         className="border-purple-100 focus-visible:ring-purple-500"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor={`edu-gpa-${index}`} className="text-sm font-medium">GPA</Label>
-                      <Input 
+                      <Input
                         id={`edu-gpa-${index}`}
-                        value={edu.gpa || ''} 
+                        value={edu.gpa || ''}
                         onChange={(e) => handleEducationChange(index, 'gpa', e.target.value)}
                         className="border-purple-100 focus-visible:ring-purple-500"
                       />
                     </div>
                   </div>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor={`edu-start-${index}`} className="text-sm font-medium">Start Date</Label>
-                      <Input 
+                      <Input
                         id={`edu-start-${index}`}
-                        value={edu.startDate || ''} 
+                        value={edu.startDate || ''}
                         onChange={(e) => handleEducationChange(index, 'startDate', e.target.value)}
                         className="border-purple-100 focus-visible:ring-purple-500"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor={`edu-end-${index}`} className="text-sm font-medium">End Date</Label>
-                      <Input 
+                      <Input
                         id={`edu-end-${index}`}
-                        value={edu.endDate || ''} 
+                        value={edu.endDate || ''}
                         onChange={(e) => handleEducationChange(index, 'endDate', e.target.value)}
                         className="border-purple-100 focus-visible:ring-purple-500"
                       />
@@ -624,13 +648,13 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
                   </div>
                 </div>
               ))}
-              
+
               {resumeData.education.length === 0 && (
                 <div className="text-center py-10">
                   <p className="text-gray-500 mb-4">No education entries found</p>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
+                  <Button
+                    type="button"
+                    variant="outline"
                     onClick={addEducation}
                     className="border-purple-300 hover:bg-purple-200 hover:text-purple-800"
                   >
@@ -641,7 +665,7 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
             </CardContent>
           </Card>
         </TabsContent>
-        
+
         {/* Experience */}
         <TabsContent value="experience">
           <Card className="shadow-sm border-purple-200">
@@ -658,10 +682,10 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
                   <div className="flex justify-between items-center">
                     <h4 className="font-medium text-purple-800">Experience #{index + 1}</h4>
                     {resumeData.experience.length > 1 && (
-                      <Button 
-                        type="button" 
-                        variant="ghost" 
-                        size="sm" 
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
                         onClick={() => removeExperience(index)}
                         className="text-red-500 hover:text-red-700 hover:bg-red-50"
                       >
@@ -669,13 +693,13 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
                       </Button>
                     )}
                   </div>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor={`exp-company-${index}`} className="text-sm font-medium">Company</Label>
-                      <Input 
+                      <Input
                         id={`exp-company-${index}`}
-                        value={exp.company} 
+                        value={exp.company}
                         onChange={(e) => handleExperienceChange(index, 'company', e.target.value)}
                         className="border-purple-100 focus-visible:ring-purple-500"
                         required
@@ -683,70 +707,70 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor={`exp-position-${index}`} className="text-sm font-medium">Position</Label>
-                      <Input 
+                      <Input
                         id={`exp-position-${index}`}
-                        value={exp.position} 
+                        value={exp.position}
                         onChange={(e) => handleExperienceChange(index, 'position', e.target.value)}
                         className="border-purple-100 focus-visible:ring-purple-500"
                         required
                       />
                     </div>
                   </div>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor={`exp-location-${index}`} className="text-sm font-medium">Location</Label>
-                      <Input 
+                      <Input
                         id={`exp-location-${index}`}
-                        value={exp.location || ''} 
+                        value={exp.location || ''}
                         onChange={(e) => handleExperienceChange(index, 'location', e.target.value)}
                         className="border-purple-100 focus-visible:ring-purple-500"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor={`exp-start-${index}`} className="text-sm font-medium">Start Date</Label>
-                      <Input 
+                      <Input
                         id={`exp-start-${index}`}
-                        value={exp.startDate || ''} 
+                        value={exp.startDate || ''}
                         onChange={(e) => handleExperienceChange(index, 'startDate', e.target.value)}
                         className="border-purple-100 focus-visible:ring-purple-500"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor={`exp-end-${index}`} className="text-sm font-medium">End Date</Label>
-                      <Input 
+                      <Input
                         id={`exp-end-${index}`}
-                        value={exp.endDate || ''} 
+                        value={exp.endDate || ''}
                         onChange={(e) => handleExperienceChange(index, 'endDate', e.target.value)}
                         className="border-purple-100 focus-visible:ring-purple-500"
                       />
                     </div>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor={`exp-description-${index}`} className="text-sm font-medium">Description</Label>
-                    <Textarea 
+                    <Textarea
                       id={`exp-description-${index}`}
-                      value={exp.description || ''} 
+                      value={exp.description || ''}
                       onChange={(e) => handleExperienceChange(index, 'description', e.target.value)}
                       className="min-h-[100px] border-purple-100 focus-visible:ring-purple-500"
                     />
                   </div>
                 </div>
               ))}
-              
+
               <Card className="bg-purple-50 shadow-none border-purple-200">
                 <CardContent className="pt-4 pb-4">
                   <h3 className="font-medium text-lg text-purple-800 mb-4">Experience Metrics</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="longevity_years" className="text-sm font-medium">Longevity Years</Label>
-                      <Input 
-                        id="longevity_years" 
+                      <Input
+                        id="longevity_years"
                         type="number"
                         min="0"
                         step="0.1"
-                        value={resumeData.longevity_years} 
+                        value={resumeData.longevity_years}
                         onChange={(e) => handleNumberChange('longevity_years', e.target.value)}
                         className="border-purple-100 focus-visible:ring-purple-500"
                       />
@@ -754,22 +778,22 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="number_of_jobs" className="text-sm font-medium">Number of Jobs</Label>
-                      <Input 
-                        id="number_of_jobs" 
+                      <Input
+                        id="number_of_jobs"
                         type="number"
                         min="0"
-                        value={resumeData.number_of_jobs} 
+                        value={resumeData.number_of_jobs}
                         onChange={(e) => handleNumberChange('number_of_jobs', e.target.value)}
                         className="border-purple-100 focus-visible:ring-purple-500"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="average_experience" className="text-sm font-medium">Average Experience</Label>
-                      <Input 
-                        id="average_experience" 
+                      <Input
+                        id="average_experience"
                         type="number"
                         step="0.01"
-                        value={resumeData.average_experience} 
+                        value={resumeData.average_experience}
                         readOnly
                         className="bg-gray-50 border-purple-100"
                       />
@@ -778,13 +802,13 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
                   </div>
                 </CardContent>
               </Card>
-              
+
               {resumeData.experience.length === 0 && (
                 <div className="text-center py-10">
                   <p className="text-gray-500 mb-4">No experience entries found</p>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
+                  <Button
+                    type="button"
+                    variant="outline"
                     onClick={addExperience}
                     className="border-purple-300 hover:bg-purple-200 hover:text-purple-800"
                   >
@@ -795,7 +819,7 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
             </CardContent>
           </Card>
         </TabsContent>
-        
+
         {/* Skills & Projects */}
         <TabsContent value="skills">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -809,28 +833,28 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
                     <Label htmlFor="skills" className="text-sm font-medium">Skills (comma separated)</Label>
                     <span className="text-sm text-purple-700 font-medium">Count: {resumeData.skills_count}</span>
                   </div>
-                  <Input 
-                    id="skills" 
-                    value={resumeData.skills.join(', ')} 
+                  <Input
+                    id="skills"
+                    value={resumeData.skills.join(', ')}
                     onChange={handleSkillChange}
                     className="border-purple-100 focus-visible:ring-purple-500"
                   />
                 </div>
-                
+
                 <div className="flex flex-wrap gap-2 pt-2">
                   {resumeData.skills.map((skill, index) => (
                     <Badge key={index} className="bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100">
                       {skill}
                     </Badge>
                   ))}
-                  
+
                   {resumeData.skills.length === 0 && (
                     <p className="text-gray-500 text-sm">No skills found</p>
                   )}
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card className="shadow-sm border-purple-200">
               <CardHeader className="bg-purple-100 pb-3 border-b border-purple-200">
                 <CardTitle>Projects</CardTitle>
@@ -841,28 +865,28 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
                     <Label htmlFor="projects" className="text-sm font-medium">Projects (comma separated)</Label>
                     <span className="text-sm text-purple-700 font-medium">Count: {resumeData.projects_count}</span>
                   </div>
-                  <Input 
-                    id="projects" 
-                    value={resumeData.projects?.join(', ') || ''} 
+                  <Input
+                    id="projects"
+                    value={resumeData.projects?.join(', ') || ''}
                     onChange={(e) => handleStringArrayChange('projects', e.target.value)}
                     className="border-purple-100 focus-visible:ring-purple-500"
                   />
                 </div>
-                
+
                 <div className="flex flex-wrap gap-2 pt-2">
                   {resumeData.projects?.map((item, index) => (
                     <Badge key={index} className="bg-green-50 text-green-700 border border-green-200 hover:bg-green-100">
                       {item}
                     </Badge>
                   ))}
-                  
+
                   {(!resumeData.projects || resumeData.projects.length === 0) && (
                     <p className="text-gray-500 text-sm">No projects found</p>
                   )}
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card className="shadow-sm border-purple-200">
               <CardHeader className="bg-purple-100 pb-3 border-b border-purple-200">
                 <CardTitle>Achievements</CardTitle>
@@ -873,28 +897,28 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
                     <Label htmlFor="achievements" className="text-sm font-medium">Achievements (comma separated)</Label>
                     <span className="text-sm text-purple-700 font-medium">Count: {resumeData.achievements_count}</span>
                   </div>
-                  <Input 
-                    id="achievements" 
-                    value={resumeData.achievements?.join(', ') || ''} 
+                  <Input
+                    id="achievements"
+                    value={resumeData.achievements?.join(', ') || ''}
                     onChange={(e) => handleStringArrayChange('achievements', e.target.value)}
                     className="border-purple-100 focus-visible:ring-purple-500"
                   />
                 </div>
-                
+
                 <div className="flex flex-wrap gap-2 pt-2">
                   {resumeData.achievements?.map((item, index) => (
                     <Badge key={index} className="bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100">
                       {item}
                     </Badge>
                   ))}
-                  
+
                   {(!resumeData.achievements || resumeData.achievements.length === 0) && (
                     <p className="text-gray-500 text-sm">No achievements found</p>
                   )}
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card className="shadow-sm border-purple-200">
               <CardHeader className="bg-purple-100 pb-3 border-b border-purple-200">
                 <CardTitle>Training & Workshops</CardTitle>
@@ -906,22 +930,22 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
                       <Label htmlFor="trainings" className="text-sm font-medium">Trainings (comma separated)</Label>
                       <span className="text-sm text-purple-700 font-medium">Count: {resumeData.trainings_count}</span>
                     </div>
-                    <Input 
-                      id="trainings" 
-                      value={resumeData.trainings?.join(', ') || ''} 
+                    <Input
+                      id="trainings"
+                      value={resumeData.trainings?.join(', ') || ''}
                       onChange={(e) => handleStringArrayChange('trainings', e.target.value)}
                       className="border-purple-100 focus-visible:ring-purple-500"
                     />
                   </div>
-                  
+
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="workshops" className="text-sm font-medium">Workshops (comma separated)</Label>
                       <span className="text-sm text-purple-700 font-medium">Count: {resumeData.workshops_count}</span>
                     </div>
-                    <Input 
-                      id="workshops" 
-                      value={resumeData.workshops?.join(', ') || ''} 
+                    <Input
+                      id="workshops"
+                      value={resumeData.workshops?.join(', ') || ''}
                       onChange={(e) => handleStringArrayChange('workshops', e.target.value)}
                       className="border-purple-100 focus-visible:ring-purple-500"
                     />
@@ -931,7 +955,7 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
             </Card>
           </div>
         </TabsContent>
-        
+
         {/* Publications */}
         <TabsContent value="publications">
           <Card className="shadow-sm border-purple-200">
@@ -944,32 +968,32 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
                   <Label htmlFor="researchPapers" className="text-sm font-medium">Research Papers (comma separated)</Label>
                   <span className="text-sm text-purple-700 font-medium">Count: {resumeData.research_papers_count}</span>
 
-                  <Input 
-                    id="researchPapers" 
-                    value={resumeData.research_papers?.join(', ') || ''} 
+                  <Input
+                    id="researchPapers"
+                    value={resumeData.research_papers?.join(', ') || ''}
                     onChange={(e) => handleStringArrayChange('research_papers', e.target.value)}
                     className="border-purple-100 focus-visible:ring-purple-500"
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="patents" className="text-sm font-medium">Patents (comma separated)</Label>
                   <span className="text-sm text-purple-700 font-medium">Count: {resumeData.patents_count}</span>
 
-                  <Input 
-                    id="patents" 
-                    value={resumeData.patents?.join(', ') || ''} 
+                  <Input
+                    id="patents"
+                    value={resumeData.patents?.join(', ') || ''}
                     onChange={(e) => handleStringArrayChange('patents', e.target.value)}
                     className="border-purple-100 focus-visible:ring-purple-500"
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="books" className="text-sm font-medium">Books (comma separated)</Label>
                   <span className="text-sm text-purple-700 font-medium">Count: {resumeData.books_count}</span>
-                  <Input 
-                    id="books" 
-                    value={resumeData.books?.join(', ') || ''} 
+                  <Input
+                    id="books"
+                    value={resumeData.books?.join(', ') || ''}
                     onChange={(e) => handleStringArrayChange('books', e.target.value)}
                     className="border-purple-100 focus-visible:ring-purple-500"
                   />
@@ -979,28 +1003,28 @@ export default function ResumeForm({ resumeData, setResumeData, parsedFile, json
           </Card>
         </TabsContent>
       </Tabs>
-      
+
       <div className="sticky bottom-0 bg-white p-4 border-t border-purple-200 rounded-md shadow-md">
         <div className="flex justify-between items-center">
-          <Button 
-            type="button" 
-            variant="outline" 
+          <Button
+            type="button"
+            variant="outline"
             onClick={() => setShowJsonDialog(true)}
             className="border-purple-300 hover:bg-purple-200 hover:text-purple-800"
           >
             <Code className="w-4 h-4 mr-2" /> View JSON Data
           </Button>
-          
+
           <div className="flex gap-4">
-            <Button 
-              type="button" 
-              variant="outline" 
+            <Button
+              type="button"
+              variant="outline"
               onClick={() => window.history.back()}
               className="border-purple-200"
             >
               Cancel
             </Button>
-            <Button 
+            <Button
               type="button"
               onClick={handleSave}
               className="bg-purple-600 hover:bg-purple-700 text-white"

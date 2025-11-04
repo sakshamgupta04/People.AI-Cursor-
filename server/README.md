@@ -41,6 +41,19 @@ SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_KEY=your_supabase_service_key
 MAX_FILE_SIZE=10485760
 ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5000
+
+# SMTP (for sending emails via Nodemailer)
+# Preferred generic variables:
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+EMAIL_ADDRESS=your_gmail_address@gmail.com
+EMAIL_PASSWORD=your_gmail_app_password
+# Optional custom from name/address (falls back to EMAIL_ADDRESS)
+EMAIL_FROM=People AI <your_gmail_address@gmail.com>
+
+# Backwards-compat (optional): if set, these will also work
+# GMAIL_USER=your_gmail_address@gmail.com
+# GMAIL_APP_PASSWORD=your_gmail_app_password
 ```
 
 ## API Endpoints

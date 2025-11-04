@@ -1,12 +1,14 @@
 import { supabase } from '../config/supabase.js';
+import { calculateOverallFitment } from '../services/fitmentService.js';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Upload file to Supabase Storage
 const uploadFileToStorage = async (file) => {
   console.log('Starting file upload:', file.originalname);
-  
+
   try {
     if (!file || !file.path) {
       throw new Error('No file or file path provided');
@@ -30,7 +32,7 @@ const uploadFileToStorage = async (file) => {
     // Read the file as a buffer
     console.log('Reading file from disk...');
     const fileBuffer = fs.readFileSync(file.path);
-    
+
     if (!fileBuffer || fileBuffer.length === 0) {
       throw new Error('File is empty or could not be read');
     }
@@ -47,7 +49,7 @@ const uploadFileToStorage = async (file) => {
 
     if (uploadError) {
       console.error('Error uploading file to Supabase:', uploadError);
-      
+
       // Provide specific error messages for common issues
       if (uploadError.message.includes('Bucket not found')) {
         throw new Error('Storage bucket "resume" not found. Please create it in your Supabase dashboard under Storage.');
@@ -55,7 +57,7 @@ const uploadFileToStorage = async (file) => {
       if (uploadError.message.includes('row-level security policy')) {
         throw new Error('Storage permissions error. Please check your Supabase RLS policies or use a service role key instead of anon key.');
       }
-      
+
       throw new Error(`File upload failed: ${uploadError.message}`);
     }
 
@@ -104,27 +106,27 @@ const uploadFileToStorage = async (file) => {
 export const getResumes = async (req, res) => {
   try {
     console.log('Fetching all resumes...');
-    
+
     const { page = 1, limit = 10 } = req.query;
     const offset = (page - 1) * limit;
-    
+
     const { data: resumes, error, count } = await supabase
       .from('resumes')
       .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
-      
+
     if (error) throw error;
-    
+
     // Get API base URL from app.locals
     const apiBaseUrl = req.app.locals.API_BASE_URL || 'http://localhost:5000';
-    
+
     // Transform the data to include full file URLs
     const resumesWithUrls = resumes.map(resume => ({
       ...resume,
       file_url: resume.file_path ? `${apiBaseUrl}/resumes/${resume.id}/file` : null
     }));
-    
+
     res.json({
       success: true,
       data: resumesWithUrls,
@@ -145,7 +147,7 @@ export const getResumes = async (req, res) => {
 export const searchResumes = async (req, res) => {
   try {
     const { query } = req.query;
-    
+
     if (!query) {
       return res.status(400).json({ error: 'Search query is required' });
     }
@@ -181,7 +183,7 @@ export const getResumeById = async (req, res) => {
 
     // Get API base URL from app.locals
     const apiBaseUrl = req.app.locals.API_BASE_URL || 'http://localhost:5000';
-    
+
     // Add full file URL
     data.file_url = data.file_path ? `${apiBaseUrl}/resumes/${data.id}/file` : null;
 
@@ -206,15 +208,15 @@ export const createResume = async (req, res) => {
 
   try {
     let resumeData = {};
-    
+
     // Parse the JSON data from the form data
     if (req.body.data) {
       try {
         console.log('Parsing resume data from request body');
-        resumeData = typeof req.body.data === 'string' 
-          ? JSON.parse(req.body.data) 
+        resumeData = typeof req.body.data === 'string'
+          ? JSON.parse(req.body.data)
           : req.body.data;
-        
+
         // If personalInfo exists, extract its fields to the root level
         if (resumeData.personalInfo) {
           const { personalInfo, ...rest } = resumeData;
@@ -223,7 +225,7 @@ export const createResume = async (req, res) => {
             ...rest
           };
         }
-        
+
         console.log('Processed resume data:', JSON.stringify(resumeData, null, 2));
       } catch (e) {
         console.error('Error parsing resume data:', {
@@ -231,12 +233,12 @@ export const createResume = async (req, res) => {
           stack: e.stack,
           data: req.body.data
         });
-      return res.status(400).json({ 
-        success: false,
-        error: 'Invalid resume data format',
-        message: e.message,
-        details: e.message 
-      });
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid resume data format',
+          message: e.message,
+          details: e.message
+        });
       }
     } else {
       console.log('No resume data found in request body');
@@ -247,21 +249,22 @@ export const createResume = async (req, res) => {
         console.log('Using data from request body:', JSON.stringify(resumeData, null, 2));
       }
     }
-    
-    // Handle file upload if present
+
+    // Handle file upload if present (save locally for now)
     if (req.file) {
-      console.log('Processing file upload...');
+      console.log('Processing file upload to local storage...');
       try {
-        const fileData = await uploadFileToStorage(req.file);
-        console.log('File upload successful:', fileData);
-        // Map file data to match database schema
-        resumeData.original_filename = fileData.original_filename;
-        resumeData.file_path = fileData.file_path;
-        resumeData.file_url = fileData.file_url;
-        resumeData.file_size = fileData.file_size;
-        resumeData.mime_type = fileData.mime_type;
+        const localFileAbsolute = req.file.path; // e.g., server/uploads/filename.ext
+        const fileName = path.basename(localFileAbsolute);
+        const relativePath = `uploads/${fileName}`; // store relative to server root
+
+        resumeData.original_filename = req.file.originalname;
+        resumeData.file_path = relativePath;
+        resumeData.file_url = `/api/resumes/temp/${fileName}`; // will be overridden to id-based URL after insert
+        resumeData.file_size = req.file.size;
+        resumeData.mime_type = req.file.mimetype;
       } catch (error) {
-        console.error('Error uploading file:', {
+        console.error('Error saving file locally:', {
           error: error.message,
           stack: error.stack,
           file: req.file ? {
@@ -270,12 +273,12 @@ export const createResume = async (req, res) => {
             size: req.file.size
           } : 'No file info'
         });
-      return res.status(500).json({ 
-        success: false,
-        error: 'Failed to process file upload',
-        message: error.message,
-        details: error.message 
-      });
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to save file locally',
+          message: error.message,
+          details: error.message
+        });
       }
     } else {
       console.log('No file uploaded with the request');
@@ -289,7 +292,7 @@ export const createResume = async (req, res) => {
       phone: resumeData.phone || resumeData.personalInfo?.phone || null,
       address: resumeData.address || resumeData.personalInfo?.address || null,
       summary: resumeData.summary || resumeData.personalInfo?.summary || null,
-      
+
       // Arrays (JSONB fields)
       education: resumeData.education || [],
       experience: resumeData.experience || [],
@@ -301,12 +304,12 @@ export const createResume = async (req, res) => {
       books: resumeData.books || [],
       trainings: resumeData.trainings || [],
       workshops: resumeData.workshops || [],
-      
+
       // Education institutes
       ug_institute: resumeData.ug_institute || resumeData.UG_InstituteName || null,
       pg_institute: resumeData.pg_institute || resumeData.PG_InstituteName || null,
       phd_institute: resumeData.phd_institute || (resumeData.PhD_Institute ? String(resumeData.PhD_Institute) : null),
-      
+
       // Metadata and analytics
       longevity_years: resumeData.longevity_years || resumeData.Longevity_Years || 0,
       number_of_jobs: resumeData.number_of_jobs || resumeData.No_of_Jobs || 0,
@@ -321,13 +324,14 @@ export const createResume = async (req, res) => {
       books_count: resumeData.books_count || resumeData.Books_No || 0,
       is_jk: Boolean(resumeData.is_jk || resumeData.State_JK || false),
       best_fit_for: resumeData.best_fit_for || resumeData.Best_Fit_For || null,
-      
+
       // File info (if uploaded)
       ...(resumeData.original_filename && { original_filename: resumeData.original_filename }),
       ...(resumeData.file_path && { file_path: resumeData.file_path }),
       ...(resumeData.file_url && { file_url: resumeData.file_url }),
       ...(resumeData.file_size && { file_size: resumeData.file_size }),
-      ...(resumeData.mime_type && { mime_type: resumeData.mime_type })
+      ...(resumeData.mime_type && { mime_type: resumeData.mime_type }),
+      personality_analysis_completed: false
     };
 
     // Validate required fields
@@ -363,18 +367,18 @@ export const createResume = async (req, res) => {
     }
 
     console.log('Resume created successfully:', JSON.stringify(insertedData[0], null, 2));
-    
+
     // Get API base URL from app.locals
     const apiBaseUrl = req.app.locals.API_BASE_URL || 'http://localhost:5000';
-    
+
     // Add file URL to the response
     const responseData = {
       ...insertedData[0],
-      file_url: insertedData[0].file_path 
-        ? `${apiBaseUrl}/resumes/${insertedData[0].id}/file` 
+      file_url: insertedData[0].file_path
+        ? `${apiBaseUrl}/resumes/${insertedData[0].id}/file`
         : null
     };
-    
+
     res.status(201).json({
       success: true,
       message: 'Resume created successfully',
@@ -396,17 +400,17 @@ export const createResume = async (req, res) => {
         } : null
       }
     });
-    
+
     const errorResponse = {
       success: false,
       error: 'Failed to create resume',
       message: error.message || 'An unknown error occurred',
-      ...(process.env.NODE_ENV === 'development' && { 
+      ...(process.env.NODE_ENV === 'development' && {
         stack: error.stack,
-        details: error.details 
+        details: error.details
       })
     };
-    
+
     console.error('Sending error response:', errorResponse);
     res.status(500).json(errorResponse);
   } finally {
@@ -466,6 +470,7 @@ export const deleteResume = async (req, res) => {
 export const updatePersonalityTestResults = async (req, res) => {
   try {
     const { email, extraversion, agreeableness, conscientiousness, neuroticism, openness } = req.body;
+    console.log('[PersonalityTest] Incoming update for:', email);
 
     // Validate required fields
     if (!email || !email.trim()) {
@@ -500,12 +505,14 @@ export const updatePersonalityTestResults = async (req, res) => {
     }
 
     // Update data matching database column names
+    // Use lowercase snake_case columns
     const updateData = {
-      Extraversion: scores.extraversion,
-      Agreeableness: scores.agreeableness,
-      Conscientiousness: scores.conscientiousness,
-      Neuroticism: scores.neuroticism,
-      Openness: scores.openness
+      extraversion: scores.extraversion,
+      agreeableness: scores.agreeableness,
+      conscientiousness: scores.conscientiousness,
+      neuroticism: scores.neuroticism,
+      openness: scores.openness,
+      personality_analysis_completed: true
     };
 
     console.log('Updating personality test results:', {
@@ -537,11 +544,74 @@ export const updatePersonalityTestResults = async (req, res) => {
       });
     }
 
-    console.log('Successfully updated personality test results:', data[0]);
+    // Recompute fitment using current record and new Big5 scores
+    const record = data[0];
+    console.log('[PersonalityTest] Recomputing fitment for:', record.email);
+    const fitment = calculateOverallFitment(
+      {
+        longevity_years: record.longevity_years,
+        average_experience: record.average_experience,
+        workshops_count: record.workshops_count,
+        trainings_count: record.trainings_count,
+        research_papers_count: record.research_papers_count,
+        patents_count: record.patents_count,
+        achievements_count: record.achievements_count,
+        books_count: record.books_count,
+        is_jk: record.is_jk,
+        number_of_jobs: record.number_of_jobs,
+        ug_institute: record.ug_institute,
+        pg_institute: record.pg_institute,
+        phd_institute: record.phd_institute
+      },
+      {
+        extraversion: scores.extraversion,
+        agreeableness: scores.agreeableness,
+        conscientiousness: scores.conscientiousness,
+        neuroticism: scores.neuroticism,
+        openness: scores.openness
+      }
+    );
+
+    const overall = fitment.overall_fitment_score;
+    const personalityScore = Math.round(fitment.big5_score);
+    // Normalize candidate_type to Title Case among allowed values
+    const allowedTypes = new Set(['Experienced', 'Intermediate', 'Fresher']);
+    const normalizedType = typeof fitment.category === 'string'
+      ? (() => {
+        const t = fitment.category.trim().toLowerCase();
+        if (t === 'experienced') return 'Experienced';
+        if (t === 'intermediate' || t === 'inexperienced') return 'Intermediate';
+        if (t === 'fresher') return 'Fresher';
+        return 'Fresher';
+      })()
+      : 'Fresher';
+    const candidateType = allowedTypes.has(normalizedType) ? normalizedType : 'Fresher';
+
+    const { data: updated, error: updError } = await supabase
+      .from('resumes')
+      .update({
+        fitment_score: overall,
+        profile_score: Math.round(overall),
+        personality_score: personalityScore,
+        candidate_type: candidateType
+      })
+      .eq('email', email.toLowerCase().trim())
+      .select();
+
+    if (updError) {
+      console.error('Error updating fitment fields:', updError);
+      return res.status(500).json({
+        success: false,
+        error: 'Database operation failed',
+        message: updError.message || 'Failed to update fitment fields'
+      });
+    }
+
+    console.log('Successfully updated personality test results and fitment:', updated?.[0] || record);
     res.status(200).json({
       success: true,
-      message: 'Personality test results updated successfully',
-      data: data[0]
+      message: 'Personality test results updated and fitment computed successfully',
+      data: updated?.[0] || record
     });
   } catch (error) {
     console.error('Unexpected error updating personality test results:', error);
@@ -558,7 +628,7 @@ export const getResumeFile = async (req, res) => {
   try {
     const { id } = req.params;
     console.log(`Getting file for resume ID: ${id}`);
-    
+
     // Get resume data from database
     const { data, error } = await supabase
       .from('resumes')
@@ -578,36 +648,59 @@ export const getResumeFile = async (req, res) => {
 
     console.log(`File path in database: ${data.file_path}`);
 
-    // Download the file from Supabase Storage
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from('resume')
-      .download(data.file_path);
+    // 1) Try to serve from local uploads if path is local
+    const maybeLocal = data.file_path.includes('uploads/') || data.file_path.includes('uploads\\');
+    if (maybeLocal) {
+      const localPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../', data.file_path);
+      try {
+        if (fs.existsSync(localPath)) {
+          const ext = path.extname(localPath).toLowerCase();
+          let contentType = 'application/octet-stream';
+          if (ext === '.pdf') contentType = 'application/pdf';
+          else if (ext === '.doc') contentType = 'application/msword';
+          else if (ext === '.docx') contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          else if (ext === '.txt') contentType = 'text/plain';
 
-    if (downloadError) {
-      console.error('Error downloading file from Supabase:', downloadError);
-      return res.status(404).json({ success: false, error: 'File not found in storage' });
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Content-Disposition', `inline; filename="${path.basename(localPath)}"`);
+          const stream = fs.createReadStream(localPath);
+          stream.pipe(res);
+          return;
+        }
+      } catch (e) {
+        console.warn('Local file read failed, falling back to storage:', e.message);
+      }
     }
 
-    if (!fileData) {
-      return res.status(404).json({ success: false, error: 'File data is empty' });
+    // 2) Fallback: Download the file from Supabase Storage
+    try {
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from('resume')
+        .download(data.file_path);
+
+      if (downloadError) {
+        console.error('Error downloading file from Supabase:', downloadError);
+        return res.status(404).json({ success: false, error: 'File not found in storage' });
+      }
+
+      if (!fileData) {
+        return res.status(404).json({ success: false, error: 'File data is empty' });
+      }
+
+      const ext = path.extname(data.file_path).toLowerCase();
+      let contentType = 'application/octet-stream';
+      if (ext === '.pdf') contentType = 'application/pdf';
+      else if (ext === '.doc') contentType = 'application/msword';
+      else if (ext === '.docx') contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      else if (ext === '.txt') contentType = 'text/plain';
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `inline; filename="${path.basename(data.file_path)}"`);
+      const buffer = await fileData.arrayBuffer();
+      res.send(Buffer.from(buffer));
+    } catch (e) {
+      console.error('Error serving file:', e);
+      res.status(500).json({ success: false, error: e.message });
     }
-
-    // Get file extension and set content type
-    const ext = path.extname(data.file_path).toLowerCase();
-    let contentType = 'application/octet-stream';
-    
-    if (ext === '.pdf') contentType = 'application/pdf';
-    else if (ext === '.doc') contentType = 'application/msword';
-    else if (ext === '.docx') contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-    else if (ext === '.txt') contentType = 'text/plain';
-
-    // Set headers
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', `inline; filename="${path.basename(data.file_path)}"`);
-
-    // Convert Blob to Buffer and send the response
-    const buffer = await fileData.arrayBuffer();
-    res.send(Buffer.from(buffer));
   } catch (error) {
     console.error('Error getting resume file:', error);
     res.status(500).json({ success: false, error: error.message });

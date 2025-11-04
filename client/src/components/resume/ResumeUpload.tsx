@@ -10,6 +10,8 @@ interface ResumeUploadProps {
   onParsingStateChange: (loading: boolean) => void;
 }
 
+import { toast } from "sonner";
+
 export default function ResumeUpload({ onResumeUploaded, onParsingStateChange }: ResumeUploadProps) {
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -312,32 +314,7 @@ export default function ResumeUpload({ onResumeUploaded, onParsingStateChange }:
 
           console.log('Resume data processed:', resumeData);
 
-          // Handle personality test invite if email is available
-          if (mappedData.personalInfo?.email) {
-            try {
-              // Import email service dynamically
-              const { sendPersonalityTestEmail } = await import('@/services/emailService');
-              
-              // Determine the Big5 test URL (in production, use Vercel deployment URL)
-              const big5TestUrl = import.meta.env.VITE_BIG5_TEST_URL || 'http://localhost:5173';
-              const testLink = `${big5TestUrl}/?email=${encodeURIComponent(mappedData.personalInfo.email)}`;
-              
-              const result = await sendPersonalityTestEmail({
-                email: mappedData.personalInfo.email,
-                name: mappedData.personalInfo.name || mappedData.personalInfo.email,
-                testLink: testLink
-              });
-              
-              if (result.success) {
-                console.log('✅ Personality test invitation sent to:', mappedData.personalInfo.email);
-              } else {
-                console.warn('⚠️ Failed to send personality test invitation:', result.error);
-              }
-            } catch (error) {
-              console.error('❌ Error sending personality test invitation:', error);
-              // Don't throw - resume parsing was successful even if email fails
-            }
-          }
+          // Do not send invitation here; it will be sent after Save Resume succeeds
 
           // Clear progress interval and set to 100%
           clearInterval(interval);

@@ -144,8 +144,8 @@ const PersonalityBar = ({
       <span>{value}%</span>
     </div>
     <div className="w-full bg-gray-200 rounded-full h-2">
-      <div 
-        className="bg-blue-500 h-2 rounded-full" 
+      <div
+        className="bg-blue-500 h-2 rounded-full"
         style={{ width: `${value}%` }}
       />
     </div>
@@ -174,10 +174,10 @@ export default function Users() {
         console.error('Failed to fetch fitment criteria, using defaults', error);
       }
     };
-    
+
     fetchCriteria();
   }, []);
-  
+
   // Determine fitment status based on score
   const getFitmentStatus = (score: number) => {
     if (score >= fitmentCriteria.best_fit) return { status: 'Best Fit', color: 'bg-green-100 text-green-800' };
@@ -190,9 +190,9 @@ export default function Users() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const response = await apiClient.getUsers();
-      
+
       if (response?.success && Array.isArray(response.data)) {
         const userProfiles = response.data.map((resume: any) => mapResumeToUserProfile(resume));
         setUsers(userProfiles);
@@ -217,7 +217,7 @@ export default function Users() {
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
     const selectedId = queryParams.get('selected');
-    
+
     if (selectedId) {
       const user = users.find(u => u.id === selectedId);
       if (user) {
@@ -255,9 +255,9 @@ export default function Users() {
             <h1 className="text-2xl font-bold">Candidates</h1>
             <p className="text-gray-500 mt-1">{users.length} candidates found</p>
           </div>
-          <Button 
-            onClick={fetchUsers} 
-            variant="outline" 
+          <Button
+            onClick={fetchUsers}
+            variant="outline"
             size="icon"
           >
             <RefreshCw className="h-4 w-4" />
@@ -278,8 +278,8 @@ export default function Users() {
             </TableHeader>
             <TableBody>
               {users.map((user) => (
-                <TableRow 
-                  key={user.id} 
+                <TableRow
+                  key={user.id}
                   className="hover:bg-gray-50 cursor-pointer"
                   onClick={() => setSelectedUser(user)}
                 >
@@ -310,19 +310,28 @@ export default function Users() {
                   <TableCell>
                     {(() => {
                       const candidateType = user.candidate_type;
-                      
-                      if (candidateType === true) {
-                        return <div className="text-sm text-gray-900">Experienced</div>;
-                      } else if (candidateType === false) {
-                        return <div className="text-sm text-gray-900">Fresher</div>;
-                      } else if (candidateType === null || candidateType === undefined) {
+
+                      // Backward compatibility for old boolean storage
+                      if (candidateType === true) return <div className="text-sm text-gray-900">Experienced</div>;
+                      if (candidateType === false) return <div className="text-sm text-gray-900">Fresher</div>;
+
+                      if (candidateType === null || candidateType === undefined) {
                         return <div className="text-sm text-gray-900">Not specified</div>;
-                      } else if (typeof candidateType === 'string' && candidateType.toLowerCase() === 'not specified') {
-                        return <div className="text-sm text-gray-900">Not specified</div>;
-                      } else {
-                        // Fallback for any other values
-                        return <div className="text-sm text-gray-900">Fresher</div>;
                       }
+
+                      if (typeof candidateType === 'string') {
+                        const normalized = candidateType.trim();
+                        if (!normalized) return <div className="text-sm text-gray-900">Not specified</div>;
+                        const titleCased = normalized
+                          .toLowerCase()
+                          .split(/\s+/)
+                          .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+                          .join(' ');
+                        return <div className="text-sm text-gray-900">{titleCased}</div>;
+                      }
+
+                      // Fallback
+                      return <div className="text-sm text-gray-900">Not specified</div>;
                     })()}
                   </TableCell>
                   <TableCell>
@@ -347,8 +356,8 @@ export default function Users() {
                     ) : 'N/A'}
                   </TableCell>
                   <TableCell>
-                    <Button 
-                      variant="ghost" 
+                    <Button
+                      variant="ghost"
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -363,7 +372,7 @@ export default function Users() {
             </TableBody>
           </Table>
         </div>
-        
+
         {selectedUser && (
           <UserDetailsDialog
             isOpen={true}

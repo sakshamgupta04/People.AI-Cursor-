@@ -49,13 +49,33 @@ export async function analyzePersonality(
       }
     `;
 
-    const result = await model.generateContent(prompt);
+    // Basic retry for 429 rate limits
+    const maxRetries = 2;
+    const baseDelayMs = 800;
+    let attempt = 0;
+    let lastError: any = null;
+    let result: any;
+    while (attempt <= maxRetries) {
+      try {
+        result = await model.generateContent(prompt);
+        break;
+      } catch (err: any) {
+        lastError = err;
+        const is429 = (err?.status === 429) || /\b429\b/.test(String(err)) || /Resource exhausted/i.test(String(err?.message));
+        if (!is429 || attempt === maxRetries) {
+          throw err;
+        }
+        const delay = baseDelayMs * Math.pow(2, attempt);
+        await new Promise(r => setTimeout(r, delay));
+        attempt++;
+      }
+    }
     const response = await result.response;
     const text = response.text();
-    
+
     // Clean up any potential markdown formatting
     const cleanedText = text.replace(/\`\`\`json|\`\`\`|\n/g, '').trim();
-    
+
     try {
       const parsedResponse = JSON.parse(cleanedText);
       return {
@@ -68,19 +88,19 @@ export async function analyzePersonality(
       // Attempt to extract content using regex as fallback
       const analysisMatch = text.match(/"analysis":\s*"([^"]+)"/);
       const recommendationsMatch = text.match(/"recommendations":\s*\[(.*?)\]/);
-      
+
       if (analysisMatch && recommendationsMatch) {
         const recommendations = recommendationsMatch[1]
           .split(',')
           .map(r => r.trim().replace(/^"|"$/g, ''));
-        
+
         return {
           traits: calculatedTraits,
           analysis: analysisMatch[1],
           recommendations: recommendations
         };
       }
-      
+
       return {
         traits: calculatedTraits,
         analysis: "We're experiencing technical difficulties with the detailed analysis. Please try again.",

@@ -20,11 +20,10 @@ const __dirname = path.dirname(__filename);
 
 // Create uploads directory if it doesn't exist
 import fs from 'fs';
-import { mkdir } from 'fs/promises';
 
 const uploadsDir = path.join(__dirname, '../../uploads');
 if (!fs.existsSync(uploadsDir)) {
-  await mkdir(uploadsDir, { recursive: true });
+  fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
 // CORS configuration
@@ -40,11 +39,11 @@ const configureCors = () => {
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
-      
+
       if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
         return callback(null, true);
       }
-      
+
       const msg = `The CORS policy for this site does not allow access from the specified origin: ${origin}`;
       console.warn(msg);
       return callback(new Error(msg), false);
@@ -116,13 +115,13 @@ app.use((err, req, res, next) => {
     query: req.query,
     headers: req.headers
   });
-  
-  res.status(500).json({ 
+
+  res.status(500).json({
     error: 'Internal Server Error',
     message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
-    ...(process.env.NODE_ENV === 'development' && { 
+    ...(process.env.NODE_ENV === 'development' && {
       stack: err.stack,
-      details: err.details 
+      details: err.details
     })
   });
 });
