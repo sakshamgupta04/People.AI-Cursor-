@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase.js';
 import { calculateOverallFitment } from '../services/fitmentService.js';
+import { retentionScorer } from '../services/retentionService.js';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
@@ -187,6 +188,26 @@ export const getResumeById = async (req, res) => {
     // Add full file URL
     data.file_url = data.file_path ? `${apiBaseUrl}/resumes/${data.id}/file` : null;
 
+    // Ensure retention_analysis JSONB is properly serialized
+    if (data.retention_analysis && typeof data.retention_analysis === 'object') {
+      // Already an object, keep as is
+    } else if (data.retention_analysis && typeof data.retention_analysis === 'string') {
+      // Try to parse if it's a string
+      try {
+        data.retention_analysis = JSON.parse(data.retention_analysis);
+      } catch (e) {
+        console.warn('Failed to parse retention_analysis JSONB:', e);
+      }
+    }
+
+    // Log retention data for debugging
+    console.log(`[getResumeById] Resume ${id} retention data:`, {
+      has_retention_analysis: !!data.retention_analysis,
+      retention_score: data.retention_score,
+      retention_risk: data.retention_risk,
+      has_component_scores: !!(data.retention_stability_score || data.retention_personality_score || data.retention_engagement_score || data.retention_fitment_factor)
+    });
+
     res.json({ success: true, data });
   } catch (error) {
     console.error('Error getting resume:', error);
@@ -309,21 +330,58 @@ export const createResume = async (req, res) => {
       ug_institute: resumeData.ug_institute || resumeData.UG_InstituteName || null,
       pg_institute: resumeData.pg_institute || resumeData.PG_InstituteName || null,
       phd_institute: resumeData.phd_institute || (resumeData.PhD_Institute ? String(resumeData.PhD_Institute) : null),
+      // Institution tiers (1, 2, or 3 only, or null if empty)
+      // Normalize: only accept 1-3, treat anything else as null or 3
+      ug_tier: (() => {
+        const tier = resumeData.ug_tier ?? resumeData.UG_Tier;
+        // Convert to integer and validate
+        const tierNum = tier !== null && tier !== undefined ? Math.round(Number(tier)) : null;
+        if (tierNum !== null && !isNaN(tierNum) && tierNum >= 1 && tierNum <= 3) {
+          return tierNum;
+        }
+        // If institution exists but tier is invalid/empty, default to tier 3
+        // If institution is empty, return null
+        return (resumeData.ug_institute || resumeData.UG_InstituteName) ? 3 : null;
+      })(),
+      pg_tier: (() => {
+        const tier = resumeData.pg_tier ?? resumeData.PG_Tier;
+        // Convert to integer and validate
+        const tierNum = tier !== null && tier !== undefined ? Math.round(Number(tier)) : null;
+        if (tierNum !== null && !isNaN(tierNum) && tierNum >= 1 && tierNum <= 3) {
+          return tierNum;
+        }
+        // If institution exists but tier is invalid/empty, default to tier 3
+        // If institution is empty, return null
+        return (resumeData.pg_institute || resumeData.PG_InstituteName) ? 3 : null;
+      })(),
 
       // Metadata and analytics
-      longevity_years: resumeData.longevity_years || resumeData.Longevity_Years || 0,
-      number_of_jobs: resumeData.number_of_jobs || resumeData.No_of_Jobs || 0,
-      average_experience: resumeData.average_experience || resumeData.Experience_Average || 0,
-      skills_count: resumeData.skills_count || resumeData.Skills_No || 0,
-      achievements_count: resumeData.achievements_count || resumeData.Achievements_No || 0,
-      trainings_count: resumeData.trainings_count || resumeData.Trainings_No || 0,
-      workshops_count: resumeData.workshops_count || resumeData.Workshops_No || 0,
-      projects_count: resumeData.projects_count || resumeData.Projects_No || 0,
-      research_papers_count: resumeData.research_papers_count || resumeData.Research_Papers_No || 0,
-      patents_count: resumeData.patents_count || resumeData.Patents_No || 0,
-      books_count: resumeData.books_count || resumeData.Books_No || 0,
+      // Ensure all integer fields are properly converted (handle decimal strings from Gemini)
+      longevity_years: Math.round(Number(resumeData.longevity_years || resumeData.Longevity_Years || 0)),
+      number_of_jobs: Math.round(Number(resumeData.number_of_jobs || resumeData.No_of_Jobs || 0)),
+      average_experience: Number(resumeData.average_experience || resumeData.Experience_Average || 0), // NUMERIC - can have decimals
+      skills_count: Math.round(Number(resumeData.skills_count || resumeData.Skills_No || 0)),
+      achievements_count: Math.round(Number(resumeData.achievements_count || resumeData.Achievements_No || 0)),
+      trainings_count: Math.round(Number(resumeData.trainings_count || resumeData.Trainings_No || 0)),
+      workshops_count: Math.round(Number(resumeData.workshops_count || resumeData.Workshops_No || 0)),
+      projects_count: Math.round(Number(resumeData.projects_count || resumeData.Projects_No || 0)),
+      research_papers_count: Math.round(Number(resumeData.research_papers_count || resumeData.Research_Papers_No || 0)),
+      patents_count: Math.round(Number(resumeData.patents_count || resumeData.Patents_No || 0)),
+      books_count: Math.round(Number(resumeData.books_count || resumeData.Books_No || 0)),
       is_jk: Boolean(resumeData.is_jk || resumeData.State_JK || false),
       best_fit_for: resumeData.best_fit_for || resumeData.Best_Fit_For || null,
+
+      // Job-specific fitment score from Gemini (preserve if job_id exists)
+      // If job_id is present, use Gemini's job-specific fitment_score
+      // Otherwise, it will be calculated generically later
+      // Ensure scores are numbers, not strings
+      ...(resumeData.job_id && resumeData.fitment_score && {
+        fitment_score: Number(resumeData.fitment_score),
+        profile_score: resumeData.profile_score ? Number(resumeData.profile_score) : Number(resumeData.fitment_score)
+      }),
+
+      // Job association - links resume to specific job position for evaluation
+      ...(resumeData.job_id && { job_id: resumeData.job_id }),
 
       // File info (if uploaded)
       ...(resumeData.original_filename && { original_filename: resumeData.original_filename }),
@@ -344,6 +402,64 @@ export const createResume = async (req, res) => {
       });
     }
 
+    // Final validation: ensure all integer fields are actually integers (not decimals)
+    // This is a safety check to catch any decimal values that might have slipped through
+    const integerFields = [
+      'longevity_years', 'number_of_jobs', 'skills_count', 'achievements_count',
+      'trainings_count', 'workshops_count', 'projects_count', 'research_papers_count',
+      'patents_count', 'books_count', 'ug_tier', 'pg_tier'
+    ];
+
+    // Also check for any other fields that might be integers (like personality scores)
+    const allPossibleIntegerFields = [
+      ...integerFields,
+      'extraversion', 'agreeableness', 'conscientiousness', 'neuroticism', 'openness'
+    ];
+
+    allPossibleIntegerFields.forEach(field => {
+      if (mappedResumeData[field] !== null && mappedResumeData[field] !== undefined) {
+        const value = mappedResumeData[field];
+        // Check if it's a string with decimal or a number that's not an integer
+        if (typeof value === 'string') {
+          const numValue = Number(value);
+          if (!isNaN(numValue) && !Number.isInteger(numValue)) {
+            mappedResumeData[field] = Math.round(numValue);
+            console.log(`[DataFix] Converted ${field} from string "${value}" to integer ${mappedResumeData[field]}`);
+          } else if (!isNaN(numValue)) {
+            mappedResumeData[field] = numValue; // Convert string number to actual number
+          }
+        } else if (typeof value === 'number' && !Number.isInteger(value)) {
+          mappedResumeData[field] = Math.round(value);
+          console.log(`[DataFix] Converted ${field} from decimal ${value} to integer ${mappedResumeData[field]}`);
+        }
+      }
+    });
+
+    // Additional safety: scan ALL fields for any decimal strings that might be integers
+    Object.keys(mappedResumeData).forEach(key => {
+      // Skip known numeric/decimal fields
+      if (['average_experience', 'fitment_score', 'profile_score', 'retention_score',
+        'retention_stability_score', 'retention_personality_score',
+        'retention_engagement_score', 'retention_fitment_factor',
+        'retention_institution_quality'].includes(key)) {
+        return; // These can have decimals
+      }
+
+      const value = mappedResumeData[key];
+      if (value !== null && value !== undefined && typeof value === 'string') {
+        // Check if it looks like a decimal number
+        if (/^-?\d+\.\d+$/.test(value.trim())) {
+          // It's a decimal string - check if this field should be integer
+          if (integerFields.includes(key) || key.includes('_count') || key.includes('_tier') ||
+            key.includes('years') || key.includes('jobs') ||
+            ['extraversion', 'agreeableness', 'conscientiousness', 'neuroticism', 'openness'].includes(key)) {
+            mappedResumeData[key] = Math.round(Number(value));
+            console.log(`[DataFix] Auto-converted ${key} from "${value}" to integer ${mappedResumeData[key]}`);
+          }
+        }
+      }
+    });
+
     console.log('Inserting resume data into database...', JSON.stringify(mappedResumeData, null, 2));
     const { data: insertedData, error: dbError } = await supabase
       .from('resumes')
@@ -358,6 +474,25 @@ export const createResume = async (req, res) => {
         hint: dbError.hint,
         code: dbError.code
       });
+
+      // Enhanced error logging: check which field has the issue
+      if (dbError.message && dbError.message.includes('invalid input syntax for type integer')) {
+        console.error('=== INTEGER TYPE ERROR DETECTED ===');
+        console.error('Full mappedResumeData:', JSON.stringify(mappedResumeData, null, 2));
+
+        // Check all fields for decimal values
+        Object.keys(mappedResumeData).forEach(key => {
+          const value = mappedResumeData[key];
+          if (value !== null && value !== undefined) {
+            if (typeof value === 'string' && value.includes('.')) {
+              console.error(`⚠️ Field "${key}" has decimal string value: "${value}"`);
+            } else if (typeof value === 'number' && !Number.isInteger(value)) {
+              console.error(`⚠️ Field "${key}" has decimal number value: ${value}`);
+            }
+          }
+        });
+      }
+
       const errorMsg = `Database operation failed: ${dbError.message}${dbError.details ? ` - ${dbError.details}` : ''}${dbError.hint ? ` (Hint: ${dbError.hint})` : ''}`;
       throw new Error(errorMsg);
     }
@@ -547,6 +682,12 @@ export const updatePersonalityTestResults = async (req, res) => {
     // Recompute fitment using current record and new Big5 scores
     const record = data[0];
     console.log('[PersonalityTest] Recomputing fitment for:', record.email);
+
+    // If job_id exists, preserve the job-specific fitment_score from Gemini
+    // Only adjust it slightly based on personality, but keep it job-specific
+    const hasJobSpecificScore = record.job_id && record.fitment_score;
+
+    // Calculate fitment for personality score and category (always needed)
     const fitment = calculateOverallFitment(
       {
         longevity_years: record.longevity_years,
@@ -572,13 +713,31 @@ export const updatePersonalityTestResults = async (req, res) => {
       }
     );
 
-    const overall = fitment.overall_fitment_score;
     const personalityScore = Math.round(fitment.big5_score);
+    const candidateCategory = fitment.category;
+
+    let overall;
+    if (hasJobSpecificScore) {
+      // For job-specific evaluations, preserve the Gemini-calculated fitment_score
+      // and only add personality component (which is job-agnostic)
+      console.log('[PersonalityTest] Preserving job-specific fitment_score:', record.fitment_score);
+
+      // Keep the job-specific fitment_score as base, add personality component
+      // Personality contributes 10-20% to overall fitment
+      const personalityAdjustment = fitment.big5_score * 0.15; // 15% weight for personality
+      overall = Math.min(100, Math.max(0, record.fitment_score + personalityAdjustment));
+
+      console.log('[PersonalityTest] Job-specific score preserved. Base:', record.fitment_score, 'Personality adjustment:', personalityAdjustment, 'Final:', overall);
+    } else {
+      // For generic evaluations (no job_id), use standard calculation
+      overall = fitment.overall_fitment_score;
+    }
+
     // Normalize candidate_type to Title Case among allowed values
     const allowedTypes = new Set(['Experienced', 'Intermediate', 'Fresher']);
-    const normalizedType = typeof fitment.category === 'string'
+    const normalizedType = typeof candidateCategory === 'string'
       ? (() => {
-        const t = fitment.category.trim().toLowerCase();
+        const t = candidateCategory.trim().toLowerCase();
         if (t === 'experienced') return 'Experienced';
         if (t === 'intermediate' || t === 'inexperienced') return 'Intermediate';
         if (t === 'fresher') return 'Fresher';
@@ -587,13 +746,52 @@ export const updatePersonalityTestResults = async (req, res) => {
       : 'Fresher';
     const candidateType = allowedTypes.has(normalizedType) ? normalizedType : 'Fresher';
 
+    // Calculate retention risk after fitment calculation
+    console.log('[RetentionAnalysis] Calculating retention risk for:', record.email);
+    const candidateDataForRetention = {
+      ...record,
+      number_of_unique_designations: record.number_of_unique_designations ?? record.number_of_jobs,
+      workshops: record.workshops_count,
+      trainings: record.trainings_count,
+      total_papers: record.research_papers_count,
+      total_patents: record.patents_count,
+      achievements: record.achievements_count,
+      fitment_score: overall
+    };
+
+    const big5ScoresForRetention = {
+      conscientiousness: scores.conscientiousness,
+      agreeableness: scores.agreeableness,
+      neuroticism: scores.neuroticism,
+      extraversion: scores.extraversion,
+      openness: scores.openness
+    };
+
+    const retentionAnalysis = retentionScorer.calculateRetentionRisk(
+      candidateDataForRetention,
+      overall,
+      big5ScoresForRetention,
+      candidateType
+    );
+
+    console.log('[RetentionAnalysis] Retention score:', retentionAnalysis.retention_score, 'Risk:', retentionAnalysis.retention_risk);
+
     const { data: updated, error: updError } = await supabase
       .from('resumes')
       .update({
         fitment_score: overall,
         profile_score: Math.round(overall),
         personality_score: personalityScore,
-        candidate_type: candidateType
+        candidate_type: candidateType,
+        retention_score: retentionAnalysis.retention_score,
+        retention_risk: retentionAnalysis.retention_risk,
+        retention_analysis: retentionAnalysis,
+        // Store component scores separately for easier querying
+        retention_stability_score: retentionAnalysis.component_scores.stability,
+        retention_personality_score: retentionAnalysis.component_scores.personality,
+        retention_engagement_score: retentionAnalysis.component_scores.engagement,
+        retention_fitment_factor: retentionAnalysis.component_scores.fitment_factor,
+        retention_institution_quality: retentionAnalysis.component_scores.institution_quality || null
       })
       .eq('email', email.toLowerCase().trim())
       .select();
@@ -607,10 +805,10 @@ export const updatePersonalityTestResults = async (req, res) => {
       });
     }
 
-    console.log('Successfully updated personality test results and fitment:', updated?.[0] || record);
+    console.log('Successfully updated personality test results, fitment, and retention analysis:', updated?.[0] || record);
     res.status(200).json({
       success: true,
-      message: 'Personality test results updated and fitment computed successfully',
+      message: 'Personality test results updated, fitment and retention analysis computed successfully',
       data: updated?.[0] || record
     });
   } catch (error) {

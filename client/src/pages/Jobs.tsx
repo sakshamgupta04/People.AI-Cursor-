@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Plus, ChevronLeft } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -6,6 +6,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import axios from "axios";
+import { toast } from "sonner";
+
+const API_BASE_URL = import.meta.env.PROD
+  ? import.meta.env.VITE_PROD_API_BASE_URL
+  : import.meta.env.VITE_DEV_API_BASE_URL || 'http://localhost:5000/api';
 
 interface Job {
   id: string;
@@ -13,143 +19,14 @@ interface Job {
   active: boolean;
   description?: string;
   requirements?: string[];
+  created_at?: string;
+  updated_at?: string;
 }
 
-const initialJobs: Job[] = [
-  { 
-    id: "1", 
-    title: "Professor in School of Law", 
-    active: false,
-    description: "Teaching and Curriculum Development:\n- Develop and deliver engaging lectures, seminars, and practical sessions in Law related subjects.\n- Design and revise course curriculum to align with industry trends and academic standards.\n- Mentor and supervise undergraduate and postgraduate students in their academic pursuits.",
-    requirements: [
-      "A Ph.D. in Law or a related field from a recognized institution.",
-      "A minimum of 10 years of teaching and research experience in higher education including 03 years of experience as Associate Professor, with significant contributions to the field.",
-      "Demonstrated leadership in academic and research activities.",
-      "Experience in guiding and mentoring students and junior faculty members.",
-      "Proven ability to secure research grants and foster interdisciplinary collaborations."
-    ]
-  },
-  { 
-    id: "2", 
-    title: "Associate Professor in School of Law", 
-    active: false,
-    description: "Teaching and Curriculum Development:\n- Teaching and delivering lectures in law-related subjects\n- Developing course materials and curriculum\n- Mentoring students and junior faculty",
-    requirements: [
-      "A Masters degree in Law or a related field with 55% minimum marks",
-      "A Ph.D. in Law or a related field from a recognized institution",
-      "Minimum of 08 years teaching experience",
-      "Evidence of scholarly achievements",
-      "Experience in curriculum development"
-    ]
-  },
-  { 
-    id: "3", 
-    title: "Professor", 
-    active: false,
-    description: "MIET invites applications for the position of Associate Professor/ Assistant Professor in the various departments. The successful candidate will have a distinguished record of teaching, scholarly research, and service.",
-    requirements: [
-      "Ph.D. in your area of expertise",
-      "Demonstrated excellence in teaching",
-      "Evidence of scholarly research",
-      "Strong communication skills",
-      "Ability to work in a collaborative environment"
-    ]
-  },
-  { 
-    id: "4",
-    title: "Machine Learning Engineer",
-    active: true,
-    description: "We are seeking a Machine Learning Engineer to design, develop, and deploy intelligent systems and models for real-world applications. The role involves working on data-driven projects using Python, TensorFlow, and PyTorch.",
-    requirements: [
-      "Bachelor’s or Master’s degree in Computer Science, AI, or related field",
-      "Strong programming skills in Python",
-      "Experience with ML frameworks like TensorFlow or PyTorch",
-      "Understanding of data preprocessing and model evaluation",
-      "Ability to deploy ML models to production environments"
-    ]
-  },
-    { 
-    id: "5",
-    title: "Full Stack Developer",
-    active: true,
-    description: "Join our software development team to build and maintain scalable web applications using modern frameworks. The ideal candidate should be comfortable working across the frontend and backend stack.",
-    requirements: [
-      "Bachelor’s degree in Computer Science or related discipline",
-      "Proficiency in JavaScript, React, and Node.js",
-      "Experience with RESTful APIs and database design",
-      "Knowledge of Git and CI/CD workflows",
-      "Ability to work in an agile development environment"
-    ]
-  },
-    { 
-    id: "6",
-    title: "Data Scientist",
-    active: true,
-    description: "We are hiring a Data Scientist to extract insights from large datasets, build predictive models, and support decision-making processes using data analytics and visualization tools.",
-    requirements: [
-      "Bachelor’s or Master’s in Data Science, Statistics, or Computer Science",
-      "Strong statistical analysis and data visualization skills",
-      "Experience with Python, R, and SQL",
-      "Hands-on experience with machine learning algorithms",
-      "Excellent communication of complex analytical results"
-    ]
-  },
-  { 
-    id: "7",
-    title: "Cloud Solutions Architect",
-    active: true,
-    description: "We’re looking for a Cloud Solutions Architect to design and manage scalable, secure, and cost-effective cloud solutions on AWS, Azure, or Google Cloud platforms.",
-    requirements: [
-      "Bachelor’s or Master’s in Computer Science, IT, or related field",
-      "Deep understanding of cloud infrastructure and services (AWS/Azure/GCP)",
-      "Experience with Docker, Kubernetes, and CI/CD pipelines",
-      "Strong knowledge of networking and cloud security best practices",
-      "Cloud certifications (AWS Certified Solutions Architect or equivalent) are a plus"
-    ]
-  },
-  { 
-    id: "8",
-    title: "Cybersecurity Analyst",
-    active: true,
-    description: "We are seeking a Cybersecurity Analyst to monitor, detect, and respond to potential cyber threats. The ideal candidate will be skilled in vulnerability assessment, network security, and incident response.",
-    requirements: [
-      "Bachelor’s in Cybersecurity, Computer Science, or Information Security",
-      "Knowledge of firewalls, IDS/IPS, and endpoint security tools",
-      "Experience with SIEM platforms (e.g., Splunk, QRadar)",
-      "Understanding of risk management and threat modeling",
-      "Strong analytical and problem-solving skills"
-    ]
-  },
-  { 
-    id: "9",
-    title: "AI Research Intern",
-    active: true,
-    description: "We’re looking for an enthusiastic AI Research Intern to assist in developing and experimenting with cutting-edge deep learning models in computer vision, NLP, and generative AI.",
-    requirements: [
-      "Pursuing a Bachelor’s or Master’s in Computer Science, AI, or related field",
-      "Knowledge of neural networks, transformers, and GANs",
-      "Experience with Python and libraries like PyTorch or TensorFlow",
-      "Good understanding of research methodologies and data handling",
-      "Eagerness to learn and contribute to ongoing AI research projects"
-    ]
-  },    
-  { 
-    id: "10", 
-    title: "Professor in School of Management", 
-    active: true,
-    description: "Teaching and Curriculum Development:\n- Develop and deliver engaging lectures, seminars, and workshops in various areas of management\n- Create and update course materials\n- Employ innovative teaching methodologies",
-    requirements: [
-      "Ph.D. in Management or related field",
-      "10 years of teaching and research experience",
-      "Leadership in academic and research spheres",
-      "Experience in curriculum development",
-      "Proven ability to secure research grants"
-    ]
-  },
-];
-
 export default function Jobs() {
-  const [jobs, setJobs] = useState(initialJobs);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showNewJobDialog, setShowNewJobDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
@@ -160,54 +37,229 @@ export default function Jobs() {
     requirements: ''
   });
 
-  const handleSubmitJob = () => {
-    setShowNewJobDialog(false);
-    setNewJob({ title: '', description: '', requirements: '' });
+  // Fetch jobs from API
+  const fetchJobs = async () => {
+    try {
+      setRefreshing(true);
+      const response = await axios.get(`${API_BASE_URL}/jobs`);
+      const jobsData = response.data?.data || [];
+
+      // Transform data to match our interface
+      const transformedJobs = jobsData.map((job: any) => ({
+        id: job.id,
+        title: job.title,
+        active: job.active ?? true,
+        description: job.description || '',
+        requirements: Array.isArray(job.requirements) ? job.requirements : [],
+        created_at: job.created_at,
+        updated_at: job.updated_at
+      }));
+
+      setJobs(transformedJobs);
+      console.log('[Jobs] Fetched jobs:', transformedJobs);
+    } catch (error: any) {
+      console.error('[Jobs] Error fetching jobs:', error);
+      toast.error('Failed to load jobs: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   };
 
-  const handleToggleActive = (id: string) => {
-    setJobs(jobs.map(job => 
-      job.id === id ? { ...job, active: !job.active } : job
-    ));
+  // Load jobs on component mount
+  useEffect(() => {
+    fetchJobs();
+  }, []);
+
+  // Handle refresh
+  const handleRefresh = () => {
+    fetchJobs();
   };
 
-  const handleViewJob = (job: Job) => {
-    setSelectedJob(job);
-    setShowViewDialog(true);
-    setIsEditing(false);
+  // Handle submit new job
+  const handleSubmitJob = async () => {
+    if (!newJob.title.trim()) {
+      toast.error('Job title is required');
+      return;
+    }
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/jobs`, {
+        title: newJob.title,
+        description: newJob.description || null,
+        requirements: newJob.requirements || null,
+        active: true
+      });
+
+      if (response.data.success) {
+        toast.success('Job created successfully');
+        setShowNewJobDialog(false);
+        setNewJob({ title: '', description: '', requirements: '' });
+        fetchJobs(); // Refresh the list
+      }
+    } catch (error: any) {
+      console.error('[Jobs] Error creating job:', error);
+      toast.error('Failed to create job: ' + (error.response?.data?.error || error.message));
+    }
   };
 
+  // Handle toggle active status
+  const handleToggleActive = async (id: string) => {
+    const job = jobs.find(j => j.id === id);
+    if (!job) return;
+
+    const newActiveStatus = !job.active;
+
+    try {
+      const response = await axios.put(`${API_BASE_URL}/jobs/${id}`, {
+        active: newActiveStatus
+      });
+
+      if (response.data.success) {
+        // Update local state
+        setJobs(jobs.map(j =>
+          j.id === id ? { ...j, active: newActiveStatus } : j
+        ));
+        toast.success('Job status updated');
+      }
+    } catch (error: any) {
+      console.error('[Jobs] Error toggling job status:', error);
+      toast.error('Failed to update job status: ' + (error.response?.data?.error || error.message));
+      // Revert on error
+      fetchJobs();
+    }
+  };
+
+  // Handle view job
+  const handleViewJob = async (job: Job) => {
+    try {
+      // Fetch full job details
+      const response = await axios.get(`${API_BASE_URL}/jobs/${job.id}`);
+      if (response.data.success) {
+        const fullJob = response.data.data;
+        setSelectedJob({
+          id: fullJob.id,
+          title: fullJob.title,
+          active: fullJob.active,
+          description: fullJob.description || '',
+          requirements: Array.isArray(fullJob.requirements) ? fullJob.requirements : [],
+          created_at: fullJob.created_at,
+          updated_at: fullJob.updated_at
+        });
+        setShowViewDialog(true);
+        setIsEditing(false);
+      }
+    } catch (error: any) {
+      console.error('[Jobs] Error fetching job details:', error);
+      // Fallback to local data
+      setSelectedJob(job);
+      setShowViewDialog(true);
+      setIsEditing(false);
+    }
+  };
+
+  // Handle edit
   const handleEdit = () => {
     setIsEditing(true);
   };
 
-  const handleDelete = () => {
-    if (selectedJob) {
-      setJobs(jobs.filter(job => job.id !== selectedJob.id));
-      setShowViewDialog(false);
-      setSelectedJob(null);
+  // Handle save edit
+  const handleSaveEdit = async () => {
+    if (!selectedJob) return;
+
+    if (!selectedJob.title.trim()) {
+      toast.error('Job title is required');
+      return;
+    }
+
+    try {
+      const response = await axios.put(`${API_BASE_URL}/jobs/${selectedJob.id}`, {
+        title: selectedJob.title,
+        description: selectedJob.description || null,
+        requirements: selectedJob.requirements || null,
+        active: selectedJob.active
+      });
+
+      if (response.data.success) {
+        toast.success('Job updated successfully');
+        setIsEditing(false);
+        fetchJobs(); // Refresh the list
+      }
+    } catch (error: any) {
+      console.error('[Jobs] Error updating job:', error);
+      toast.error('Failed to update job: ' + (error.response?.data?.error || error.message));
     }
   };
 
-  const handleSaveEdit = () => {
-    if (selectedJob) {
-      setJobs(jobs.map(job => 
-        job.id === selectedJob.id ? selectedJob : job
-      ));
-      setIsEditing(false);
+  // Handle delete
+  const handleDelete = async () => {
+    if (!selectedJob) return;
+
+    if (!confirm(`Are you sure you want to delete "${selectedJob.title}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await axios.delete(`${API_BASE_URL}/jobs/${selectedJob.id}`);
+
+      if (response.data.success) {
+        toast.success('Job deleted successfully');
+        setShowViewDialog(false);
+        setSelectedJob(null);
+        fetchJobs(); // Refresh the list
+      }
+    } catch (error: any) {
+      console.error('[Jobs] Error deleting job:', error);
+      toast.error('Failed to delete job: ' + (error.response?.data?.error || error.message));
     }
   };
+
+  // Handle delete from table
+  const handleDeleteFromTable = async (job: Job) => {
+    if (!confirm(`Are you sure you want to delete "${job.title}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await axios.delete(`${API_BASE_URL}/jobs/${job.id}`);
+
+      if (response.data.success) {
+        toast.success('Job deleted successfully');
+        fetchJobs(); // Refresh the list
+      }
+    } catch (error: any) {
+      console.error('[Jobs] Error deleting job:', error);
+      toast.error('Failed to delete job: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="page-container p-4 bg-gray-100 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading jobs...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container p-4 bg-gray-100 min-h-screen">
       <div className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden border border-gray-200">
         <div className="p-4 flex justify-between items-center border-b border-gray-200 bg-gradient-to-r from-blue-50 via-white to-blue-50">
           <h1 className="text-2xl font-bold text-gray-800">Job Listings</h1>
-          <Button size="icon" variant="outline" className="hover:bg-blue-100 transition-colors duration-200">
-            <RefreshCw size={16} className="text-gray-700" />
+          <Button
+            size="icon"
+            variant="outline"
+            className="hover:bg-blue-100 transition-colors duration-200"
+            onClick={handleRefresh}
+            disabled={refreshing}
+          >
+            <RefreshCw size={16} className={`text-gray-700 ${refreshing ? 'animate-spin' : ''}`} />
           </Button>
         </div>
-        
+
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -218,41 +270,49 @@ export default function Jobs() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {jobs.map((job) => (
-                <TableRow key={job.id}>
-                  <TableCell className="font-medium">{job.title}</TableCell>
-                  <TableCell>
-                    <div className="flex space-x-2">
-                      <Button 
-                        size="sm" 
-                        className="bg-blue-500 hover:bg-blue-600"
-                        onClick={() => handleViewJob(job)}
-                      >
-                        View
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="destructive"
-                        onClick={() => handleDelete()}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Switch 
-                      checked={job.active} 
-                      onCheckedChange={() => handleToggleActive(job.id)}
-                    />
+              {jobs.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-center py-8 text-gray-500">
+                    No jobs found. Click "Add New Job" to create one.
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                jobs.map((job) => (
+                  <TableRow key={job.id}>
+                    <TableCell className="font-medium">{job.title}</TableCell>
+                    <TableCell>
+                      <div className="flex space-x-2">
+                        <Button
+                          size="sm"
+                          className="bg-blue-500 hover:bg-blue-600"
+                          onClick={() => handleViewJob(job)}
+                        >
+                          View
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleDeleteFromTable(job)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Switch
+                        checked={job.active}
+                        onCheckedChange={() => handleToggleActive(job.id)}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </div>
-        
+
         <div className="p-4">
-          <Button 
+          <Button
             className="bg-blue-500 hover:bg-blue-600"
             onClick={() => setShowNewJobDialog(true)}
           >
@@ -268,17 +328,19 @@ export default function Jobs() {
           <DialogHeader>
             <DialogTitle>Add New Job</DialogTitle>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
             <div>
+              <label className="text-sm font-medium mb-2 block">Job Title *</label>
               <Input
                 placeholder="Job Title"
                 value={newJob.title}
                 onChange={(e) => setNewJob({ ...newJob, title: e.target.value })}
               />
             </div>
-            
+
             <div>
+              <label className="text-sm font-medium mb-2 block">Job Description</label>
               <Textarea
                 placeholder="Job Description"
                 value={newJob.description}
@@ -286,21 +348,22 @@ export default function Jobs() {
                 className="min-h-[100px]"
               />
             </div>
-            
+
             <div>
+              <label className="text-sm font-medium mb-2 block">Job Requirements (one per line)</label>
               <Textarea
-                placeholder="Job Requirements"
+                placeholder="Enter requirements, one per line"
                 value={newJob.requirements}
                 onChange={(e) => setNewJob({ ...newJob, requirements: e.target.value })}
                 className="min-h-[100px]"
               />
             </div>
-            
+
             <div className="flex justify-end space-x-2 pt-4">
               <Button variant="outline" onClick={() => setShowNewJobDialog(false)}>
                 Cancel
               </Button>
-              <Button 
+              <Button
                 className="bg-blue-500 hover:bg-blue-600"
                 onClick={handleSubmitJob}
               >
@@ -316,8 +379,8 @@ export default function Jobs() {
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 size="icon"
                 onClick={() => {
                   setShowViewDialog(false);
@@ -328,23 +391,29 @@ export default function Jobs() {
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <span>{selectedJob?.title}</span>
-              <Button 
-                size="icon" 
-                variant="outline" 
-                className="ml-auto"
-              >
-                <RefreshCw size={16} />
-              </Button>
             </DialogTitle>
           </DialogHeader>
-          
+
           {selectedJob && (
             <div className="space-y-6">
+              {isEditing && (
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Job Title *</label>
+                  <Input
+                    value={selectedJob.title}
+                    onChange={(e) => setSelectedJob({
+                      ...selectedJob,
+                      title: e.target.value
+                    })}
+                  />
+                </div>
+              )}
+
               <div>
                 <h3 className="text-lg font-semibold mb-2">Description</h3>
                 {isEditing ? (
                   <Textarea
-                    value={selectedJob.description}
+                    value={selectedJob.description || ''}
                     onChange={(e) => setSelectedJob({
                       ...selectedJob,
                       description: e.target.value
@@ -352,8 +421,8 @@ export default function Jobs() {
                     className="min-h-[200px]"
                   />
                 ) : (
-                  <div className="whitespace-pre-line">
-                    {selectedJob.description}
+                  <div className="whitespace-pre-line text-gray-700">
+                    {selectedJob.description || 'No description provided'}
                   </div>
                 )}
               </div>
@@ -362,18 +431,23 @@ export default function Jobs() {
                 <h3 className="text-lg font-semibold mb-2">Requirements</h3>
                 {isEditing ? (
                   <Textarea
-                    value={selectedJob.requirements?.join("\n")}
+                    value={selectedJob.requirements?.join("\n") || ''}
                     onChange={(e) => setSelectedJob({
                       ...selectedJob,
                       requirements: e.target.value.split("\n").filter(r => r.trim())
                     })}
                     className="min-h-[200px]"
+                    placeholder="Enter requirements, one per line"
                   />
                 ) : (
                   <ul className="list-disc pl-6 space-y-2">
-                    {selectedJob.requirements?.map((req, index) => (
-                      <li key={index}>{req}</li>
-                    ))}
+                    {selectedJob.requirements && selectedJob.requirements.length > 0 ? (
+                      selectedJob.requirements.map((req, index) => (
+                        <li key={index} className="text-gray-700">{req}</li>
+                      ))
+                    ) : (
+                      <li className="text-gray-500 italic">No requirements specified</li>
+                    )}
                   </ul>
                 )}
               </div>
@@ -381,13 +455,13 @@ export default function Jobs() {
               <div className="flex justify-end space-x-2 pt-4">
                 {isEditing ? (
                   <>
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       onClick={() => setIsEditing(false)}
                     >
                       Cancel
                     </Button>
-                    <Button 
+                    <Button
                       className="bg-blue-500 hover:bg-blue-600"
                       onClick={handleSaveEdit}
                     >
@@ -396,13 +470,13 @@ export default function Jobs() {
                   </>
                 ) : (
                   <>
-                    <Button 
+                    <Button
                       variant="outline"
                       onClick={handleEdit}
                     >
                       Edit
                     </Button>
-                    <Button 
+                    <Button
                       variant="destructive"
                       onClick={handleDelete}
                     >

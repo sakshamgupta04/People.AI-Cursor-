@@ -10,7 +10,9 @@ export interface ResumeData {
   experience: Experience[];
   skills: string[];
   ug_institute?: string;
+  ug_tier?: number | null; // 1, 2, 3, or null
   pg_institute?: string;
+  pg_tier?: number | null; // 1, 2, 3, or null
   phd_institute: number; // 0 for no, 1 for yes
   longevity_years: number; // working years count
   number_of_jobs: number;
@@ -34,6 +36,7 @@ export interface ResumeData {
   best_fit_for?: string; // Making this optional and adding it to the interface
   profile_score?: number;
   fitment_score?: number;
+  job_id?: string; // ID of the job position this resume is being evaluated for
 }
 
 export interface Education {

@@ -1,16 +1,29 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Upload, FileText, File as FileIcon, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ResumeData } from "@/types/resume";
+import axios from "axios";
+import { toast } from "sonner";
+
+const API_BASE_URL = import.meta.env.PROD
+  ? import.meta.env.VITE_PROD_API_BASE_URL
+  : import.meta.env.VITE_DEV_API_BASE_URL || 'http://localhost:5000/api';
+
+interface Job {
+  id: string;
+  title: string;
+  active: boolean;
+  description?: string;
+  requirements?: string[];
+}
 
 interface ResumeUploadProps {
   onResumeUploaded: (data: ResumeData, file: File) => void;
   onParsingStateChange: (loading: boolean) => void;
 }
-
-import { toast } from "sonner";
 
 export default function ResumeUpload({ onResumeUploaded, onParsingStateChange }: ResumeUploadProps) {
   const [file, setFile] = useState<File | null>(null);
@@ -18,6 +31,39 @@ export default function ResumeUpload({ onResumeUploaded, onParsingStateChange }:
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [selectedJob, setSelectedJob] = useState<string>("");
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
+
+  // Fetch active jobs on component mount
+  useEffect(() => {
+    const fetchActiveJobs = async () => {
+      try {
+        setLoadingJobs(true);
+        const response = await axios.get(`${API_BASE_URL}/jobs`, {
+          params: { active: 'true' }
+        });
+        const jobsData = response.data?.data || [];
+        const activeJobs = jobsData
+          .filter((job: any) => job.active !== false)
+          .map((job: any) => ({
+            id: job.id,
+            title: job.title,
+            active: job.active ?? true,
+            description: job.description || '',
+            requirements: Array.isArray(job.requirements) ? job.requirements : []
+          }));
+        setJobs(activeJobs);
+      } catch (error: any) {
+        console.error('Error fetching jobs:', error);
+        toast.error('Failed to load jobs: ' + (error.response?.data?.error || error.message));
+      } finally {
+        setLoadingJobs(false);
+      }
+    };
+
+    fetchActiveJobs();
+  }, []);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -105,6 +151,13 @@ export default function ResumeUpload({ onResumeUploaded, onParsingStateChange }:
   const parseResume = async () => {
     if (!file) return;
 
+    // Require job selection before parsing
+    if (!selectedJob) {
+      setError("Please select a job before parsing the resume");
+      toast.error("Please select a job before parsing the resume");
+      return;
+    }
+
     try {
       setUploading(true);
       onParsingStateChange(true);
@@ -133,14 +186,37 @@ export default function ResumeUpload({ onResumeUploaded, onParsingStateChange }:
         throw new Error('GEMINI_API_KEY is not set in environment variables');
       }
 
+      // Get selected job details for job-specific evaluation
+      const selectedJobData = jobs.find(j => j.id === selectedJob);
+      const jobTitle = selectedJobData?.title || '';
+      const jobDescription = selectedJobData?.description || '';
+      const jobRequirements = selectedJobData?.requirements || [];
+
       const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
-      // Craft a prompt that will work well for resume parsing
+      // Enhanced prompt for job-specific candidate evaluation
       const prompt = `
-        Extract structured information from the following resume and return it in JSON format.
-        Use double quotes for all keys and string values.
+        You are an expert HR evaluator. Your task is to extract structured information from a resume and evaluate the candidate specifically for a target job position.
         
-        Extract all of the following fields:
+        ============================================
+        TARGET JOB POSITION FOR EVALUATION:
+        ============================================
+        Job Title: ${jobTitle}
+        ${jobDescription ? `Job Description: ${jobDescription}` : ''}
+        ${jobRequirements.length > 0 ? `Required Skills/Qualifications: ${jobRequirements.join(', ')}` : ''}
+        
+        ============================================
+        EVALUATION INSTRUCTIONS:
+        ============================================
+        1. Extract all resume information accurately
+        2. Compare the candidate's profile against the target job requirements above
+        3. Assess skill alignment, experience relevance, and educational fit for THIS SPECIFIC JOB
+        4. Calculate Fitment_Score based on how well the candidate matches THIS job (not a generic role)
+        5. Use the exact job title "${jobTitle}" for Best_Fit_For field
+        
+        ============================================
+        EXTRACT THE FOLLOWING FIELDS:
+        ============================================
         
         - personalInfo: object with name, email, phone, address, summary
         - education: array of objects with institution, degree, field, startDate, endDate, gpa
@@ -148,7 +224,16 @@ export default function ResumeUpload({ onResumeUploaded, onParsingStateChange }:
         - skills: array of skills as strings
         - UG_InstituteName: string (undergraduate institution name)
         - PG_InstituteName: string (postgraduate institution name)
+        - UG_Tier: number (institution tier: 1 for top-tier, 2 for good institutions, 3 for others. Return null/empty if institution name is empty. Only use 1, 2, or 3 - nothing else)
+        - PG_Tier: number (institution tier: 1 for top-tier, 2 for good institutions, 3 for others. Return null/empty if institution name is empty. Only use 1, 2, or 3 - nothing else)
         - PhD_Institute: number (0 for no, 1 for yes)
+        
+        For UG_Tier and PG_Tier classification:
+        - Tier 1: Top-tier institutions (IITs, IIMs, AIIMS, IISc, top central/state universities, premier engineering/medical colleges)
+        - Tier 2: Good institutions (NITs, good state universities, reputable private universities, established engineering/medical colleges)
+        - Tier 3: Other institutions (local colleges, lesser-known institutions, or if uncertain about the institution's reputation)
+        - If institution name is empty or not found, do not include the tier field (or set to null)
+        
         - Longevity_Years: number (working years count)
         - No_of_Jobs: number
         - Experience_Average: number (Longevity_Years / No_of_Jobs)
@@ -168,27 +253,87 @@ export default function ResumeUpload({ onResumeUploaded, onParsingStateChange }:
         - State_JK: number (0 for no, 1 for yes - for J&K resident)
         - Projects_No: number
         - Projects: array of strings
-        - Best_Fit_For: string (suggest a job role suitable for the candidate)
+        
+        - Best_Fit_For: string (MUST be exactly: "${jobTitle}" - this is the job being evaluated for)
+        
         - Profile_Score: number (calculate based on the following criteria: 
-- pg_institute: 0.1 (1 if true, else 0)
-- phd_institute: 0.2 (1 if true, else 0)
-- longevity_years: 0.1 (max 5 years → normalized as min(value / 5, 1))
-- achievements_count: 0.05 (max 15 → normalized as min(value / 15, 1))
-- trainings_count: 0.05 (max 10 → normalized as min(value / 10, 1))
-- workshops_count: 0.05 (max 10 → normalized as min(value / 10, 1))
-- research_papers_count: 0.2 (max 10 → normalized as min(value / 10, 1))
-- patents_count: 0.1 (max 5 → normalized as min(value / 5, 1))
-- books_count: 0.05 (max 5 → normalized as min(value / 5, 1))
-- is_jk: 0.1 (1 if true, else 0) * 100
-}
+          - pg_institute: 0.1 (1 if true, else 0)
+          - phd_institute: 0.2 (1 if true, else 0)
+          - longevity_years: 0.1 (max 5 years → normalized as min(value / 5, 1))
+          - achievements_count: 0.05 (max 15 → normalized as min(value / 15, 1))
+          - trainings_count: 0.05 (max 10 → normalized as min(value / 10, 1))
+          - workshops_count: 0.05 (max 10 → normalized as min(value / 10, 1))
+          - research_papers_count: 0.2 (max 10 → normalized as min(value / 10, 1))
+          - patents_count: 0.1 (max 5 → normalized as min(value / 5, 1))
+          - books_count: 0.05 (max 5 → normalized as min(value / 5, 1))
+          - is_jk: 0.1 (1 if true, else 0)
+          Multiply the sum by 100 to get Profile_Score
         ) 
-        - Fitment_Score: number (Profile_score)
         
-        
+        - Fitment_Score: number (CRITICAL: This MUST be job-specific and DIFFERENT for different jobs. Calculate using this EXACT formula:
+          
+          STEP 1: Calculate Base Score from Profile_Score (already calculated above)
+          baseScore = Profile_Score
+          
+          STEP 2: Job-Specific Skill Match Analysis
+          Required skills for "${jobTitle}": ${jobRequirements.length > 0 ? jobRequirements.join(', ') : 'See job description'}
+          Candidate skills: [extract from resume]
+          
+          skillMatchScore = 0
+          For each required skill:
+            - If candidate has exact match: +3 points
+            - If candidate has similar/related skill: +1.5 points
+            - If candidate lacks skill: 0 points
+          skillMatchScore = (matched_skills / total_required_skills) * 25
+          (Maximum 25 points, minimum 0)
+          
+          STEP 3: Experience Relevance for "${jobTitle}"
+          Analyze candidate's work experience:
+          - If experience directly matches "${jobTitle}" role: +20 points
+          - If experience is in related/similar field: +10 points
+          - If experience is in different field but transferable: +5 points
+          - If no relevant experience: 0 points
+          experienceScore = calculated based on above (Maximum 20 points)
+          
+          STEP 4: Educational Background Suitability
+          Check if candidate's education aligns with "${jobTitle}" requirements:
+          - If degree/field directly matches job requirements: +10 points
+          - If degree/field is related: +5 points
+          - If degree/field is different: 0 points
+          educationScore = calculated based on above (Maximum 10 points)
+          
+          STEP 5: Additional Qualifications Match
+          Check certifications, trainings, projects against job description:
+          - Highly relevant certifications/trainings: +5 points
+          - Somewhat relevant: +2 points
+          - Not relevant: 0 points
+          additionalScore = calculated based on above (Maximum 5 points)
+          
+          STEP 6: Calculate Penalties for Major Gaps
+          penalty = 0
+          - If missing critical required skill: -10 points per critical skill
+          - If experience level is too low for role: -15 points
+          - If education doesn't meet minimum requirements: -10 points
+          penalty = sum of all penalties (Maximum -30 points)
+          
+          STEP 7: Final Fitment_Score Calculation
+          Fitment_Score = baseScore + skillMatchScore + experienceScore + educationScore + additionalScore + penalty
+          
+          IMPORTANT RULES:
+          - Fitment_Score MUST be between 0 and 100
+          - Fitment_Score MUST be different for different job roles
+          - If candidate is evaluated for "Cybersecurity Analyst", the score should reflect cybersecurity fit
+          - If same candidate is evaluated for "Machine Learning Engineer", the score should reflect ML fit
+          - These two scores MUST be different based on skill/experience match
+          
+          Example: If candidate has ML skills but not cybersecurity skills:
+            - For ML Engineer role: Fitment_Score should be HIGHER (e.g., 75-85)
+            - For Cybersecurity Analyst role: Fitment_Score should be LOWER (e.g., 45-60)
+        )
         
         For locations, check if it mentions Jammu, Kashmir, or J&K and set State_JK to 1 if it does.
         
-        Return only the JSON with no additional explanation or markdown formatting.
+        Return only valid JSON with no additional explanation or markdown formatting. Use double quotes for all keys and string values.
       `;
 
       try {
@@ -268,6 +413,12 @@ export default function ResumeUpload({ onResumeUploaded, onParsingStateChange }:
             skills: parsedResumeData.skills || [],
             ug_institute: parsedResumeData.UG_InstituteName || "",
             pg_institute: parsedResumeData.PG_InstituteName || "",
+            ug_tier: (parsedResumeData.UG_Tier !== undefined && parsedResumeData.UG_Tier !== null && parsedResumeData.UG_Tier >= 1 && parsedResumeData.UG_Tier <= 3)
+              ? parsedResumeData.UG_Tier
+              : (parsedResumeData.UG_InstituteName ? 3 : null), // Default to tier 3 if institution exists but tier not provided, null if empty
+            pg_tier: (parsedResumeData.PG_Tier !== undefined && parsedResumeData.PG_Tier !== null && parsedResumeData.PG_Tier >= 1 && parsedResumeData.PG_Tier <= 3)
+              ? parsedResumeData.PG_Tier
+              : (parsedResumeData.PG_InstituteName ? 3 : null), // Default to tier 3 if institution exists but tier not provided, null if empty
             phd_institute: parsedResumeData.PhD_Institute || 0,
             longevity_years: parsedResumeData.Longevity_Years || 0,
             number_of_jobs: parsedResumeData.No_of_Jobs || 0,
@@ -301,6 +452,9 @@ export default function ResumeUpload({ onResumeUploaded, onParsingStateChange }:
             }
           }
 
+          // Add job_id to the mapped data
+          mappedData.job_id = selectedJob;
+
           // Store resume data in your preferred storage
           const resumeData = {
             user_id: 'your_user_id',
@@ -310,6 +464,7 @@ export default function ResumeUpload({ onResumeUploaded, onParsingStateChange }:
             parsed_data: mappedData,
             status: 'processed',
             created_at: new Date().toISOString(),
+            job_id: selectedJob, // Store selected job ID
           };
 
           console.log('Resume data processed:', resumeData);
@@ -418,14 +573,55 @@ export default function ResumeUpload({ onResumeUploaded, onParsingStateChange }:
   };
 
   return (
-    <div className="flex flex-col items-center">
+    <div className="flex flex-col items-center space-y-4">
+      {/* Job Selection Dropdown */}
+      <div className="w-full">
+        <label className="text-sm font-medium mb-2 block text-gray-700">
+          Select Job Position <span className="text-red-500">*</span>
+        </label>
+        {loadingJobs ? (
+          <div className="text-sm text-gray-500">Loading jobs...</div>
+        ) : (
+          <Select value={selectedJob} onValueChange={setSelectedJob}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select a job position for this resume" />
+            </SelectTrigger>
+            <SelectContent>
+              {jobs.length === 0 ? (
+                <SelectItem value="" disabled>
+                  No active jobs available
+                </SelectItem>
+              ) : (
+                jobs.map((job) => (
+                  <SelectItem key={job.id} value={job.id}>
+                    {job.title}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        )}
+        {jobs.length === 0 && !loadingJobs && (
+          <p className="text-sm text-gray-500 mt-2">
+            Please create an active job in the Jobs page first.
+          </p>
+        )}
+      </div>
+
       <div
         className={`border-2 border-dashed rounded-lg p-10 w-full text-center cursor-pointer transition-colors
-          ${dragging ? 'bg-purple-50 border-purple-400' : 'bg-gray-50 border-gray-300'}`}
+          ${dragging ? 'bg-purple-50 border-purple-400' : 'bg-gray-50 border-gray-300'}
+          ${!selectedJob ? 'opacity-50 cursor-not-allowed' : ''}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={() => document.getElementById('file-upload')?.click()}
+        onClick={() => {
+          if (selectedJob) {
+            document.getElementById('file-upload')?.click();
+          } else {
+            toast.error("Please select a job first");
+          }
+        }}
       >
         <input
           id="file-upload"
@@ -442,7 +638,9 @@ export default function ResumeUpload({ onResumeUploaded, onParsingStateChange }:
           <div>
             {!file && (
               <>
-                <p className="text-lg font-medium mb-2">Drop your resume here or click to browse</p>
+                <p className="text-lg font-medium mb-2">
+                  {selectedJob ? "Drop your resume here or click to browse" : "Please select a job first"}
+                </p>
                 <p className="text-sm text-gray-500">Supports PDF, DOC, DOCX (Max 10MB)</p>
               </>
             )}
@@ -476,6 +674,7 @@ export default function ResumeUpload({ onResumeUploaded, onParsingStateChange }:
           <Button
             onClick={parseResume}
             className="bg-purple-600 hover:bg-purple-700 text-white"
+            disabled={!selectedJob}
           >
             Parse Resume
           </Button>

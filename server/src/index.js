@@ -8,6 +8,7 @@ import resumeRoutes from './routes/resumes.js';
 import criteriaRoutes from './routes/criteria.js';
 import jobRoutes from './routes/jobs.js';
 import emailRoutes from './routes/email.js';
+import retentionRoutes from './routes/retention.js';
 
 // Load environment variables
 dotenv.config();
@@ -89,6 +90,7 @@ app.use('/api/resumes', resumeRoutes);
 app.use('/api/criteria', criteriaRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/email', emailRoutes);
+app.use('/api/retention', retentionRoutes);
 
 // Serve static files from uploads directory
 app.use('/uploads', express.static(uploadsDir));

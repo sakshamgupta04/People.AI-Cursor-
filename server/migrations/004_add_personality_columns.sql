@@ -18,3 +18,5 @@ ALTER TABLE resumes
   ADD CONSTRAINT IF NOT EXISTS chk_openness_range CHECK (openness IS NULL OR openness BETWEEN -100 AND 100);
 
 
+
+

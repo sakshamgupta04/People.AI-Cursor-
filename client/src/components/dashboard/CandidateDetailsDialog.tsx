@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import FitmentScoreGauge from "@/components/users/FitmentScoreGauge";
 import PersonalityPieChart from "@/components/users/PersonalityPieChart";
+import RetentionAnalysis from "@/components/users/RetentionAnalysis";
 import { Candidate } from "./CandidateScores";
 import axios from "axios";
 import { useEffect, useState } from "react";
@@ -34,26 +35,13 @@ type Profile = {
   file_url?: string;
 };
 
-const RetentionRing = ({ label, value, color }: { label: string; value: number; color: string }) => {
-  const circumference = 2 * Math.PI * 42;
-  const offset = circumference - (value / 100) * circumference;
-  return (
-    <div className="flex flex-col items-center">
-      <svg width="100" height="100" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="42" stroke="#e5e7eb" strokeWidth="8" fill="none" />
-        <circle cx="50" cy="50" r="42" stroke={color} strokeWidth="8" fill="none" strokeLinecap="round" strokeDasharray={`${circumference} ${circumference}`} strokeDashoffset={offset} transform="rotate(-90 50 50)" />
-        <text x="50" y="52" textAnchor="middle" fontSize="14" fill="#111827">{value}%</text>
-      </svg>
-      <div className="mt-1 text-sm font-medium text-gray-800">{label}</div>
-    </div>
-  );
-};
 
 export default function CandidateDetailsDialog({ isOpen, onClose, candidate }: CandidateDetailsProps) {
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [retentionData, setRetentionData] = useState<any>(null);
   useEffect(() => {
     const load = async () => {
-      if (!candidate?.id) { setProfile(null); return; }
+      if (!candidate?.id) { setProfile(null); setRetentionData(null); return; }
       try {
         const res = await axios.get(`${apiConfig.baseUrl}/resumes/${candidate.id}`);
         const r = res.data?.data || res.data;
@@ -76,6 +64,70 @@ export default function CandidateDetailsDialog({ isOpen, onClose, candidate }: C
           file_url: r.file_url,
         };
         setProfile(p);
+        // Extract retention data from resume
+        console.log('CandidateDetailsDialog - Resume data:', r);
+        if (r.retention_analysis) {
+          let parsedRetentionData = r.retention_analysis;
+          // Handle string format
+          if (typeof parsedRetentionData === 'string') {
+            try {
+              parsedRetentionData = JSON.parse(parsedRetentionData);
+            } catch (e) {
+              console.error('Error parsing retention_analysis:', e);
+              parsedRetentionData = null;
+            }
+          }
+
+          // Ensure we have a valid object
+          if (parsedRetentionData && typeof parsedRetentionData === 'object') {
+            // Ensure component scores are populated from database columns if missing in JSONB
+            if (!parsedRetentionData.component_scores) {
+              parsedRetentionData.component_scores = {};
+            }
+            parsedRetentionData.component_scores = {
+              stability: parsedRetentionData.component_scores.stability ?? r.retention_stability_score ?? 0,
+              personality: parsedRetentionData.component_scores.personality ?? r.retention_personality_score ?? 0,
+              engagement: parsedRetentionData.component_scores.engagement ?? r.retention_engagement_score ?? 0,
+              fitment_factor: parsedRetentionData.component_scores.fitment_factor ?? r.retention_fitment_factor ?? 0,
+              institution_quality: parsedRetentionData.component_scores.institution_quality ?? r.retention_institution_quality ?? undefined
+            };
+            // Ensure required fields exist
+            parsedRetentionData.retention_score = parsedRetentionData.retention_score ?? r.retention_score ?? 0;
+            parsedRetentionData.retention_risk = parsedRetentionData.retention_risk ?? (r.retention_risk || 'Medium');
+            parsedRetentionData.risk_flags = parsedRetentionData.risk_flags || [];
+            parsedRetentionData.flag_count = parsedRetentionData.flag_count ?? parsedRetentionData.risk_flags?.length ?? 0;
+            parsedRetentionData.insights = parsedRetentionData.insights || [];
+            console.log('CandidateDetailsDialog - Parsed retention data:', parsedRetentionData);
+            setRetentionData(parsedRetentionData);
+          } else {
+            console.warn('CandidateDetailsDialog - Invalid retention_analysis format');
+            setRetentionData(null);
+          }
+        } else if (r.retention_score !== null && r.retention_score !== undefined) {
+          // If retention_analysis is not stored, construct it from individual fields
+          // Use component scores from database columns if available
+          setRetentionData({
+            retention_score: r.retention_score,
+            retention_risk: r.retention_risk || 'Medium',
+            risk_description: r.retention_risk === 'Low'
+              ? 'Low Risk - High retention likelihood'
+              : r.retention_risk === 'High'
+                ? 'High Risk - Intervention recommended'
+                : 'Medium Risk - Monitor and support',
+            component_scores: {
+              stability: r.retention_stability_score ?? 0,
+              personality: r.retention_personality_score ?? 0,
+              engagement: r.retention_engagement_score ?? 0,
+              fitment_factor: r.retention_fitment_factor ?? 0,
+              institution_quality: r.retention_institution_quality ?? undefined
+            },
+            risk_flags: [],
+            flag_count: 0,
+            insights: []
+          });
+        } else {
+          setRetentionData(null);
+        }
       } catch {
         setProfile({
           id: candidate.id,
@@ -83,6 +135,7 @@ export default function CandidateDetailsDialog({ isOpen, onClose, candidate }: C
           email: candidate.email,
           score: candidate.fitment_score,
         });
+        setRetentionData(null);
       }
     };
     if (isOpen) load();
@@ -156,22 +209,8 @@ export default function CandidateDetailsDialog({ isOpen, onClose, candidate }: C
                 </div>
               )}
 
-              <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm space-y-4">
-                <h4 className="text-2xl font-semibold text-center">Retention Analysis</h4>
-                <div className="grid grid-cols-3 gap-6 place-items-center">
-                  <div className="text-center">
-                    <div className="text-sm text-gray-500 mb-2">4 weeks</div>
-                    <RetentionRing label="Possible" value={80} color="#f59e0b" />
-                  </div>
-                  <div className="text-center">
-                    <div className="text-sm text-gray-500 mb-2">8 weeks</div>
-                    <RetentionRing label="Likely" value={88} color="#22c55e" />
-                  </div>
-                  <div className="text-center">
-                    <div className="text-sm text-gray-500 mb-2">12 weeks</div>
-                    <RetentionRing label="Yes" value={96} color="#16a34a" />
-                  </div>
-                </div>
+              <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+                <RetentionAnalysis retentionData={retentionData} />
               </div>
             </div>
           </div>
