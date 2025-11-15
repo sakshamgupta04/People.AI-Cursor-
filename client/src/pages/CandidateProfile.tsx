@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import FitmentScoreGauge from "@/components/users/FitmentScoreGauge";
 import PersonalityPieChart from "@/components/users/PersonalityPieChart";
-import RetentionAnalysis from "@/components/users/RetentionAnalysis";
 import type { UserProfile } from "./Users";
 
 const API_BASE_URL = import.meta.env.PROD
@@ -41,74 +40,15 @@ const mapResumeToUserProfile = (resume: any): UserProfile => ({
     skills: Array.isArray(resume.skills) ? resume.skills : [],
     candidate_type: resume.candidate_type,
     file_url: resume.file_url,
+    resume_url: resume.resume_url || resume.file_url,
+    personality_score: resume.personality_score || undefined,
 });
 
-/**
- * Extract and normalize retention data from resume
- * Handles both JSONB retention_analysis and individual column data
- */
-const extractRetentionData = (resume: any): any | null => {
-    // Check if we have any retention data at all
-    const hasRetentionScore = resume.retention_score !== null && resume.retention_score !== undefined;
-    const hasRetentionAnalysis = resume.retention_analysis !== null && resume.retention_analysis !== undefined;
-
-    if (!hasRetentionScore && !hasRetentionAnalysis) {
-        console.log('[extractRetentionData] No retention data found');
-        return null;
-    }
-
-    // Parse retention_analysis JSONB if it exists
-    let parsedAnalysis = null;
-    if (resume.retention_analysis) {
-        try {
-            if (typeof resume.retention_analysis === 'string') {
-                parsedAnalysis = JSON.parse(resume.retention_analysis);
-            } else if (typeof resume.retention_analysis === 'object') {
-                parsedAnalysis = resume.retention_analysis;
-            }
-        } catch (e) {
-            console.error('[extractRetentionData] Error parsing retention_analysis:', e);
-        }
-    }
-
-    // Build retention data object
-    // Priority: Individual columns > JSONB data > Defaults
-    const retentionData: any = {
-        retention_score: Number(resume.retention_score) || Number(parsedAnalysis?.retention_score) || 0,
-        retention_risk: resume.retention_risk || parsedAnalysis?.retention_risk || 'Medium',
-        risk_description: parsedAnalysis?.risk_description || (
-            resume.retention_risk === 'Low'
-                ? 'Low Risk - High retention likelihood'
-                : resume.retention_risk === 'High'
-                    ? 'High Risk - Intervention recommended'
-                    : 'Medium Risk - Monitor and support'
-        ),
-        component_scores: {
-            stability: Number(resume.retention_stability_score) || Number(parsedAnalysis?.component_scores?.stability) || 0,
-            personality: Number(resume.retention_personality_score) || Number(parsedAnalysis?.component_scores?.personality) || 0,
-            engagement: Number(resume.retention_engagement_score) || Number(parsedAnalysis?.component_scores?.engagement) || 0,
-            fitment_factor: Number(resume.retention_fitment_factor) || Number(parsedAnalysis?.component_scores?.fitment_factor) || 0,
-            institution_quality: resume.retention_institution_quality !== undefined
-                ? Number(resume.retention_institution_quality)
-                : parsedAnalysis?.component_scores?.institution_quality !== undefined
-                    ? Number(parsedAnalysis.component_scores.institution_quality)
-                    : undefined
-        },
-        risk_flags: Array.isArray(parsedAnalysis?.risk_flags) ? parsedAnalysis.risk_flags : [],
-        flag_count: parsedAnalysis?.flag_count || parsedAnalysis?.risk_flags?.length || 0,
-        insights: Array.isArray(parsedAnalysis?.insights) ? parsedAnalysis.insights : [],
-        tier_details: parsedAnalysis?.tier_details || undefined
-    };
-
-    console.log('[extractRetentionData] Extracted retention data:', retentionData);
-    return retentionData;
-};
 
 export default function CandidateProfile() {
     const { id } = useParams();
     const navigate = useNavigate();
     const [user, setUser] = useState<UserProfile | null>(null);
-    const [retentionData, setRetentionData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -141,27 +81,11 @@ export default function CandidateProfile() {
                 console.log('[CandidateProfile] Resume data received:', {
                     id: resume.id,
                     name: resume.name,
-                    email: resume.email,
-                    hasRetentionScore: resume.retention_score !== null && resume.retention_score !== undefined,
-                    hasRetentionAnalysis: !!resume.retention_analysis,
-                    retentionScore: resume.retention_score,
-                    retentionRisk: resume.retention_risk,
-                    componentScores: {
-                        stability: resume.retention_stability_score,
-                        personality: resume.retention_personality_score,
-                        engagement: resume.retention_engagement_score,
-                        fitment_factor: resume.retention_fitment_factor
-                    }
+                    email: resume.email
                 });
 
                 // Map resume to user profile
                 setUser(mapResumeToUserProfile(resume));
-
-                // Extract retention data
-                const extractedRetentionData = extractRetentionData(resume);
-                setRetentionData(extractedRetentionData);
-
-                console.log('[CandidateProfile] Retention data set:', extractedRetentionData);
 
             } catch (err: any) {
                 console.error('[CandidateProfile] Error loading candidate:', err);
@@ -206,16 +130,20 @@ export default function CandidateProfile() {
     }
 
     const openResume = () => {
-        const base = window.location.origin;
-        if (user.id) {
-            window.open(`${base}/api/resumes/${user.id}/file`, '_blank', 'noopener,noreferrer');
-            return;
-        }
-        if (user.file_url) {
-            const url = user.file_url.startsWith('http')
-                ? user.file_url
-                : `${base}${user.file_url.startsWith('/') ? '' : '/'}${user.file_url}`;
+        // Prefer resume_url (Supabase Storage public URL) over file_url
+        const resumeUrl = (user as any).resume_url || user.file_url;
+
+        if (resumeUrl) {
+            // If it's already a full URL (starts with http), use it directly
+            // Otherwise, it might be a relative path
+            const url = resumeUrl.startsWith('http')
+                ? resumeUrl
+                : resumeUrl.startsWith('/')
+                    ? `${window.location.origin}${resumeUrl}`
+                    : `${window.location.origin}/${resumeUrl}`;
             window.open(url, '_blank', 'noopener,noreferrer');
+        } else {
+            console.warn('No resume URL available for candidate:', user.id);
         }
     };
 
@@ -260,8 +188,12 @@ export default function CandidateProfile() {
                                 <h4 className="font-medium text-lg">About Me:</h4>
                                 <p className="text-base text-gray-600">{user.about}</p>
                             </div>
-                            <Button className="w-full" onClick={openResume} disabled={!user.id && !user.file_url}>
-                                {user.id || user.file_url ? 'View Resume' : 'No Resume Available'}
+                            <Button
+                                className="w-full"
+                                onClick={openResume}
+                                disabled={!((user as any).resume_url || user.file_url)}
+                            >
+                                {((user as any).resume_url || user.file_url) ? 'View Resume' : 'No Resume Available'}
                             </Button>
                         </div>
                     </div>
@@ -273,6 +205,33 @@ export default function CandidateProfile() {
                             <h3 className="text-2xl font-semibold mb-2 text-center">AI Generated Fitment Score</h3>
                             <div className="w-full max-w-[220px] mx-auto">
                                 <FitmentScoreGauge score={user.score} />
+                            </div>
+                            <div className="mt-4">
+                                <h4 className="font-medium text-center mb-1 text-lg">Score Breakdown</h4>
+                                {(() => {
+                                    const overall = user.fitment_score ?? user.score ?? 0;
+                                    // Determine candidate type similar to backend normalization
+                                    const rawType = typeof user.candidate_type === 'string' ? user.candidate_type.trim().toLowerCase() : '';
+                                    const isExperienced = rawType === 'experienced';
+                                    const datasetShare = isExperienced ? 70 : 30;
+                                    const big5Share = 100 - datasetShare;
+
+                                    const datasetPoints = (overall * datasetShare) / 100;
+                                    const big5Points = (overall * big5Share) / 100;
+
+                                    return (
+                                        <div className="space-y-1 px-5">
+                                            <div className="flex justify-between text-sm">
+                                                <span className="font-medium">Resume Fit (Profile & Experience):</span>
+                                                <span>{datasetPoints.toFixed(1)}</span>
+                                            </div>
+                                            <div className="flex justify-between text-sm">
+                                                <span className="font-medium">Personality Fit (Big5):</span>
+                                                <span>{big5Points.toFixed(1)}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         </div>
 
@@ -286,10 +245,7 @@ export default function CandidateProfile() {
                             </div>
                         )}
 
-                        {/* Retention Analysis */}
-                        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-                            <RetentionAnalysis retentionData={retentionData} />
-                        </div>
+                        {/* Retention Analysis removed for retention-free view */}
                     </div>
                 </div>
             </ScrollArea>

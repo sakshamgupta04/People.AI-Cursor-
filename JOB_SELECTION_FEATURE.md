@@ -73,3 +73,4 @@ In `client/src/types/resume.ts`:
 - The job selection is required - users cannot proceed without selecting a job
 - If no active jobs exist, a helpful message is displayed
 
+

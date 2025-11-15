@@ -1,188 +1,297 @@
+import React, { useEffect, useState } from 'react';
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import FitmentScoreGauge from "./FitmentScoreGauge";
 
 interface RetentionAnalysisProps {
-    retentionData: any | null;
+  retentionData: {
+    retention_score?: number | null;
+    retention_risk?: string | null;
+    retention_analysis?: any;
+  } | null;
 }
 
-// Circular progress ring component for component scores
-const ComponentScoreRing = ({ label, value, color }: { label: string; value: number; color: string }) => {
-    const circumference = 2 * Math.PI * 42;
-    const safeValue = Math.max(0, Math.min(100, value || 0));
-    const offset = circumference - (safeValue / 100) * circumference;
-
-    return (
-        <div className="flex flex-col items-center w-full">
-            <svg width="100" height="100" viewBox="0 0 100 100" className="mb-2">
-                <circle cx="50" cy="50" r="42" stroke="#e5e7eb" strokeWidth="8" fill="none" />
-                <circle
-                    cx="50"
-                    cy="50"
-                    r="42"
-                    stroke={color}
-                    strokeWidth="8"
-                    fill="none"
-                    strokeLinecap="round"
-                    strokeDasharray={`${circumference} ${circumference}`}
-                    strokeDashoffset={offset}
-                    transform="rotate(-90 50 50)"
-                />
-                <text x="50" y="52" textAnchor="middle" fontSize="14" fill="#111827" fontWeight="600">
-                    {Math.round(safeValue)}
-                </text>
-            </svg>
-            <div className="text-xs font-medium text-gray-800 text-center px-1 leading-tight">{label}</div>
-        </div>
-    );
+const getRiskColor = (risk: string | null | undefined) => {
+  if (!risk) return 'bg-gray-100 text-gray-800';
+  switch (risk.toLowerCase()) {
+    case 'low':
+      return 'bg-green-100 text-green-800';
+    case 'medium':
+      return 'bg-amber-100 text-amber-800';
+    case 'high':
+      return 'bg-red-100 text-red-800';
+    default:
+      return 'bg-gray-100 text-gray-800';
+  }
 };
 
-// Get color based on score
-const getComponentColor = (score: number): string => {
-    const safeScore = Math.max(0, Math.min(100, score || 0));
-    if (safeScore >= 70) return "#22c55e"; // green-500
-    if (safeScore >= 50) return "#f59e0b"; // amber-500
-    return "#ef4444"; // red-500
-};
+// Retention Score Gauge Component
+function RetentionScoreGauge({ score }: { score: number }) {
+  const [currentRotation, setCurrentRotation] = useState(0);
+  const targetRotation = (score / 100) * 180; // 180 degrees for half circle
+  
+  // Determine color based on score (higher is better for retention)
+  const getColor = () => {
+    if (score >= 70) return '#4ade80'; // green - Low risk
+    if (score >= 50) return '#facc15'; // yellow - Medium risk
+    return '#ef4444'; // red - High risk
+  };
+
+  // Animate the gauge needle
+  useEffect(() => {
+    const animationDuration = 1500;
+    const startTime = performance.now();
+    const startRotation = currentRotation;
+    
+    const animate = (currentTime: number) => {
+      const elapsedTime = currentTime - startTime;
+      const progress = Math.min(elapsedTime / animationDuration, 1);
+      
+      const easeOutQuad = (t: number) => 1 - (1 - t) * (1 - t);
+      const easedProgress = easeOutQuad(progress);
+      
+      const newRotation = startRotation + (targetRotation - startRotation) * easedProgress;
+      setCurrentRotation(newRotation);
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+    
+    requestAnimationFrame(animate);
+  }, [score, targetRotation]);
+
+  return (
+    <div className="relative w-full mx-auto">
+      <svg viewBox="0 0 200 140" className="w-full drop-shadow-md">
+        {/* Gauge background */}
+        <path
+          d="M 10 110 A 90 90 0 0 1 190 110"
+          fill="none"
+          stroke="#e5e7eb"
+          strokeWidth="20"
+          strokeLinecap="round"
+        />
+        
+        {/* Red section (0-50%) - High Risk */}
+        <path
+          d="M 10 110 A 90 90 0 0 1 55 29"
+          fill="none"
+          stroke="#ef4444"
+          strokeWidth="20"
+          strokeLinecap="round"
+        />
+        {/* Yellow section (50-70%) - Medium Risk */}
+        <path
+          d="M 55 29 A 90 90 0 0 1 100 20"
+          fill="none"
+          stroke="#facc15"
+          strokeWidth="20"
+          strokeLinecap="round"
+        />
+        {/* Green section (70-100%) - Low Risk */}
+        <path
+          d="M 100 20 A 90 90 0 0 1 190 110"
+          fill="none"
+          stroke="#4ade80"
+          strokeWidth="20"
+          strokeLinecap="round"
+        />
+        
+        {/* Score indicators */}
+        <text x="10" y="130" textAnchor="middle" fontSize="12" fontWeight="medium" fill="#666">0</text>
+        <text x="55" y="25" textAnchor="middle" fontSize="12" fontWeight="medium" fill="#666">50</text>
+        <text x="100" y="15" textAnchor="middle" fontSize="12" fontWeight="medium" fill="#666">70</text>
+        <text x="190" y="130" textAnchor="middle" fontSize="12" fontWeight="medium" fill="#666">100</text>
+        
+        {/* Gauge needle pivot point */}
+        <circle cx="100" cy="110" r="8" fill="#374151" />
+        
+        {/* Gauge needle */}
+        <g transform={`rotate(${currentRotation - 90} 100 110)`}>
+          <line
+            x1="100"
+            y1="110"
+            x2="100"
+            y2="30"
+            stroke="#1f2937"
+            strokeWidth="4"
+            strokeLinecap="round"
+          />
+          <circle cx="100" cy="30" r="6" fill={getColor()} stroke="#1f2937" strokeWidth="1.5" />
+        </g>
+        
+        {/* Score text */}
+        <text
+          x="100"
+          y="85"
+          textAnchor="middle"
+          fontSize="28"
+          fontWeight="bold"
+          fill="#374151"
+        >
+          {score.toFixed(0)}
+        </text>
+      </svg>
+      
+      {/* Gauge labels */}
+      <div className="flex justify-between mt-2 px-4 text-sm text-gray-600 font-medium">
+        <span>High Risk</span>
+        <span>Medium</span>
+        <span>Low Risk</span>
+      </div>
+    </div>
+  );
+}
 
 export default function RetentionAnalysis({ retentionData }: RetentionAnalysisProps) {
-    // Debug: Always log what we receive
-    console.log('[RetentionAnalysis] Received data:', retentionData);
-    console.log('[RetentionAnalysis] Data type:', typeof retentionData);
-    console.log('[RetentionAnalysis] Is null?:', retentionData === null);
-    console.log('[RetentionAnalysis] Is undefined?:', retentionData === undefined);
-
-    // If no data at all, show message
-    if (!retentionData || retentionData === null || retentionData === undefined) {
-        return (
-            <Card className="bg-white border-gray-200">
-                <CardHeader>
-                    <CardTitle className="text-2xl font-semibold text-center">Retention Analysis</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-center text-gray-500 py-4">Retention analysis not available</p>
-                    <p className="text-center text-xs text-gray-400 mt-2">Complete the personality test to generate retention analysis</p>
-                </CardContent>
-            </Card>
-        );
+  // Extract data with safe defaults
+  const retentionScore = retentionData?.retention_score ?? null;
+  const retentionRisk = retentionData?.retention_risk ?? null;
+  
+  // Parse retention_analysis if it's a string
+  let analysisData: any = null;
+  if (retentionData?.retention_analysis) {
+    if (typeof retentionData.retention_analysis === 'string') {
+      try {
+        analysisData = JSON.parse(retentionData.retention_analysis);
+      } catch (e) {
+        console.error('Error parsing retention_analysis:', e);
+        analysisData = null;
+      }
+    } else {
+      analysisData = retentionData.retention_analysis;
     }
+  }
 
-    // Extract data with safe defaults
-    const retentionScore = Number(retentionData.retention_score) || 0;
-    const retentionRisk = retentionData.retention_risk || 'Medium';
-    const componentScores = retentionData.component_scores || {};
-
-    // Get component scores with defaults
-    const stability = Number(componentScores.stability) || 0;
-    const personality = Number(componentScores.personality) || 0;
-    const engagement = Number(componentScores.engagement) || 0;
-    const fitmentFactor = Number(componentScores.fitment_factor) || 0;
-
-    // Component data array
-    const components = [
-        { label: "Job Stability", score: stability },
-        { label: "Personality Fit", score: personality },
-        { label: "Professional Engagement", score: engagement },
-        { label: "Fitment Factor", score: fitmentFactor }
-    ];
-
-    // Build analysis text
-    const buildAnalysisText = (): string => {
-        let text = `RETENTION ANALYSIS SUMMARY\n${'='.repeat(60)}\n\n`;
-        text += `Retention Score: ${retentionScore.toFixed(2)}/100\n`;
-        text += `Risk Level: ${retentionRisk}\n`;
-        text += `\n${retentionData.risk_description || `Risk Description: ${retentionRisk} Risk`}\n\n`;
-
-        text += `COMPONENT BREAKDOWN:\n`;
-        text += `• Job Stability: ${stability.toFixed(2)}/100\n`;
-        text += `• Personality Fit: ${personality.toFixed(2)}/100\n`;
-        text += `• Professional Engagement: ${engagement.toFixed(2)}/100\n`;
-        text += `• Fitment Factor: ${fitmentFactor.toFixed(2)}/100\n`;
-
-        if (componentScores.institution_quality !== undefined) {
-            text += `• Institution Quality: ${Number(componentScores.institution_quality).toFixed(2)}/100\n`;
-        }
-
-        // Risk flags
-        const riskFlags = Array.isArray(retentionData.risk_flags) ? retentionData.risk_flags : [];
-        const flagCount = retentionData.flag_count || riskFlags.length || 0;
-
-        text += `\nRISK FLAGS: ${flagCount}\n`;
-        if (riskFlags.length > 0) {
-            riskFlags.forEach((flag: string, idx: number) => {
-                text += `  ${idx + 1}. ${flag}\n`;
-            });
-        } else {
-            text += `  ✓ No significant risk flags identified\n`;
-        }
-
-        // Insights/Recommendations
-        const insights = Array.isArray(retentionData.insights) ? retentionData.insights : [];
-        text += `\nKEY RECOMMENDATIONS:\n`;
-        if (insights.length > 0) {
-            insights.forEach((insight: string, idx: number) => {
-                const cleanInsight = String(insight).replace(/^[→⚡⚠️✅]\s*/, '');
-                text += `  ${idx + 1}. ${cleanInsight}\n`;
-            });
-        } else {
-            text += `  No specific recommendations available.\n`;
-        }
-
-        return text;
-    };
-
-    const analysisText = buildAnalysisText();
-
-    console.log('[RetentionAnalysis] Processed data:', {
-        retentionScore,
-        retentionRisk,
-        components,
-        hasAnalysisText: !!analysisText
-    });
-
+  // If no data at all, show message
+  if (!retentionScore && !retentionRisk && !analysisData) {
     return (
-        <div className="space-y-4">
-            {/* Retention Score Gauge */}
-            <Card className="bg-white border-gray-200">
-                <CardHeader className="pb-3">
-                    <CardTitle className="text-2xl font-semibold text-center mb-4">Retention Analysis</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="w-full max-w-[220px] mx-auto">
-                        <FitmentScoreGauge score={retentionScore} />
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Component Scores as Circular Meters */}
-            <Card className="bg-white border-gray-200">
-                <CardContent className="pt-6">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6 place-items-center py-4">
-                        {components.map((component, index) => (
-                            <div key={index} className="text-center w-full">
-                                <ComponentScoreRing
-                                    label={component.label}
-                                    value={component.score}
-                                    color={getComponentColor(component.score)}
-                                />
-                            </div>
-                        ))}
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Detailed Analysis Text */}
-            <Card className="bg-white border-gray-200">
-                <CardHeader className="pb-3">
-                    <CardTitle className="text-lg font-bold text-gray-800">Detailed Retention Analysis</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto">
-                        <pre className="whitespace-pre-wrap text-sm text-gray-800 font-mono leading-relaxed">
-                            {analysisText}
-                        </pre>
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
+      <Card className="bg-white border-gray-200">
+        <CardHeader>
+          <CardTitle className="text-2xl font-semibold text-center">Retention Analysis</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-center text-gray-500 py-4">Retention analysis not available</p>
+          <p className="text-center text-xs text-gray-400 mt-2">Complete the personality test to generate retention analysis</p>
+        </CardContent>
+      </Card>
     );
+  }
+
+  const scoreValue = retentionScore !== null && retentionScore !== undefined ? Number(retentionScore) : 0;
+  const riskValue = retentionRisk || 'Unknown';
+
+  return (
+    <Card className="bg-white border-gray-200">
+      <CardHeader>
+        <CardTitle className="text-2xl font-semibold text-center mb-4">Retention Analysis</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Retention Score Gauge */}
+        {retentionScore !== null && retentionScore !== undefined && (
+          <div className="w-full max-w-[220px] mx-auto">
+            <RetentionScoreGauge score={scoreValue} />
+          </div>
+        )}
+
+        {/* Retention Risk Badge */}
+        {retentionRisk && (
+          <div className="flex justify-center mt-4">
+            <span className={`px-4 py-2 text-sm font-semibold rounded-full ${getRiskColor(retentionRisk)}`}>
+              Risk Level: {riskValue}
+            </span>
+          </div>
+        )}
+
+        {/* Detailed Analysis Section */}
+        {analysisData && (
+          <div className="mt-4">
+            <h4 className="text-base font-semibold mb-2 text-gray-800">Detailed Analysis</h4>
+            <ScrollArea className="h-[250px] border border-gray-200 rounded-md p-4 bg-gray-50">
+              <div className="space-y-3 text-sm">
+                {/* Component Scores */}
+                {analysisData.component_scores && (
+                  <div>
+                    <h5 className="font-semibold text-gray-700 mb-2">Component Scores:</h5>
+                    <div className="space-y-1 pl-2">
+                      {analysisData.component_scores.stability !== undefined && (
+                        <div className="text-gray-600">• Stability: {Number(analysisData.component_scores.stability).toFixed(1)}</div>
+                      )}
+                      {analysisData.component_scores.personality !== undefined && (
+                        <div className="text-gray-600">• Personality: {Number(analysisData.component_scores.personality).toFixed(1)}</div>
+                      )}
+                      {analysisData.component_scores.engagement !== undefined && (
+                        <div className="text-gray-600">• Engagement: {Number(analysisData.component_scores.engagement).toFixed(1)}</div>
+                      )}
+                      {analysisData.component_scores.fitment_factor !== undefined && (
+                        <div className="text-gray-600">• Fitment Factor: {Number(analysisData.component_scores.fitment_factor).toFixed(1)}</div>
+                      )}
+                      {analysisData.component_scores.institution_quality !== undefined && (
+                        <div className="text-gray-600">• Institution Quality: {Number(analysisData.component_scores.institution_quality).toFixed(1)}</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Risk Flags */}
+                {analysisData.risk_flags && Array.isArray(analysisData.risk_flags) && analysisData.risk_flags.length > 0 && (
+                  <div>
+                    <h5 className="font-semibold text-gray-700 mb-2">Risk Flags:</h5>
+                    <ul className="list-disc pl-5 space-y-1">
+                      {analysisData.risk_flags.map((flag: string, index: number) => (
+                        <li key={index} className="text-gray-600">{flag}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Insights */}
+                {analysisData.insights && Array.isArray(analysisData.insights) && analysisData.insights.length > 0 && (
+                  <div>
+                    <h5 className="font-semibold text-gray-700 mb-2">Insights:</h5>
+                    <ul className="list-disc pl-5 space-y-1">
+                      {analysisData.insights.map((insight: string, index: number) => (
+                        <li key={index} className="text-gray-600">{insight}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Risk Description */}
+                {analysisData.risk_description && (
+                  <div>
+                    <h5 className="font-semibold text-gray-700 mb-2">Risk Assessment:</h5>
+                    <p className="text-gray-600 pl-2">{analysisData.risk_description}</p>
+                  </div>
+                )}
+
+                {/* Tier Details */}
+                {analysisData.tier_details && (
+                  <div>
+                    <h5 className="font-semibold text-gray-700 mb-2">Institution Details:</h5>
+                    <div className="space-y-1 pl-2 text-gray-600">
+                      {JSON.stringify(analysisData.tier_details, null, 2)}
+                    </div>
+                  </div>
+                )}
+
+                {/* If no structured data, show raw JSON */}
+                {!analysisData.component_scores && 
+                 !analysisData.risk_flags && 
+                 !analysisData.insights && 
+                 !analysisData.risk_description && (
+                  <div className="text-gray-600">
+                    <pre className="text-xs whitespace-pre-wrap">
+                      {JSON.stringify(analysisData, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
+

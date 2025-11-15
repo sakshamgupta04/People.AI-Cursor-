@@ -8,7 +8,7 @@ interface FitmentScoreGaugeProps {
 export default function FitmentScoreGauge({ score }: FitmentScoreGaugeProps) {
   const [currentRotation, setCurrentRotation] = useState(0);
   const targetRotation = (score / 100) * 180; // 180 degrees for half circle
-  
+
   // Determine color based on score
   const getColor = () => {
     if (score >= 70) return '#4ade80'; // green
@@ -21,23 +21,23 @@ export default function FitmentScoreGauge({ score }: FitmentScoreGaugeProps) {
     const animationDuration = 1500; // 1.5 seconds
     const startTime = performance.now();
     const startRotation = currentRotation;
-    
+
     const animate = (currentTime: number) => {
       const elapsedTime = currentTime - startTime;
       const progress = Math.min(elapsedTime / animationDuration, 1);
-      
+
       // Easing function for smoother animation
       const easeOutQuad = (t: number) => 1 - (1 - t) * (1 - t);
       const easedProgress = easeOutQuad(progress);
-      
+
       const newRotation = startRotation + (targetRotation - startRotation) * easedProgress;
       setCurrentRotation(newRotation);
-      
+
       if (progress < 1) {
         requestAnimationFrame(animate);
       }
     };
-    
+
     requestAnimationFrame(animate);
   }, [score, targetRotation]);
 
@@ -53,7 +53,7 @@ export default function FitmentScoreGauge({ score }: FitmentScoreGaugeProps) {
           strokeWidth="20"
           strokeLinecap="round"
         />
-        
+
         {/* Red section (0-50%) */}
         <path
           d="M 10 110 A 90 90 0 0 1 55 29"
@@ -78,16 +78,16 @@ export default function FitmentScoreGauge({ score }: FitmentScoreGaugeProps) {
           strokeWidth="20"
           strokeLinecap="round"
         />
-        
+
         {/* Score indicators */}
-        <text x="10" y="130" textAnchor="middle" fontSize="12" fontWeight="medium" fill="#666">0</text>
-        <text x="55" y="25" textAnchor="middle" fontSize="12" fontWeight="medium" fill="#666">50</text>
-        <text x="100" y="15" textAnchor="middle" fontSize="12" fontWeight="medium" fill="#666">70</text>
-        <text x="190" y="130" textAnchor="middle" fontSize="12" fontWeight="medium" fill="#666">100</text>
-        
+        <text x="20" y="130" textAnchor="middle" fontSize="12" fontWeight="medium" fill="#666">0</text>
+        <text x="60" y="32" textAnchor="middle" fontSize="12" fontWeight="medium" fill="#666">50</text>
+        <text x="115" y="24" textAnchor="middle" fontSize="12" fontWeight="medium" fill="#666">70</text>
+        <text x="185" y="130" textAnchor="middle" fontSize="12" fontWeight="medium" fill="#666">100</text>
+
         {/* Gauge needle pivot point */}
         <circle cx="100" cy="110" r="8" fill="#374151" />
-        
+
         {/* Gauge needle */}
         <g transform={`rotate(${currentRotation - 90} 100 110)`}>
           <line
@@ -101,7 +101,7 @@ export default function FitmentScoreGauge({ score }: FitmentScoreGaugeProps) {
           />
           <circle cx="100" cy="30" r="6" fill={getColor()} stroke="#1f2937" strokeWidth="1.5" />
         </g>
-        
+
         {/* Score text */}
         <text
           x="100"
@@ -114,12 +114,12 @@ export default function FitmentScoreGauge({ score }: FitmentScoreGaugeProps) {
           {score.toFixed(0)}%
         </text>
       </svg>
-      
-      {/* Gauge labels */}
-      <div className="flex justify-between mt-2 px-4 text-sm text-gray-600 font-medium">
-        <span>Poor</span>
-        <span>Average</span>
-        <span>Excellent</span>
+
+      {/* Gauge labels aligned roughly with color regions */}
+      <div className="mt-2 px-6 text-sm text-gray-600 font-medium flex justify-between">
+        <span className="w-1/3 text-left">Poor</span>
+        <span className="w-1/3 text-center">Average</span>
+        <span className="w-1/3 text-right">Excellent</span>
       </div>
     </div>
   );

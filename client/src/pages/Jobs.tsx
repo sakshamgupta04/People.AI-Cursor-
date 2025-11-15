@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import axios from "axios";
 import { toast } from "sonner";
 
@@ -376,8 +377,8 @@ export default function Jobs() {
 
       {/* View/Edit Job Dialog */}
       <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <Button
                 variant="ghost"
@@ -390,12 +391,12 @@ export default function Jobs() {
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span>{selectedJob?.title}</span>
+              <span className="text-xl">{selectedJob?.title}</span>
             </DialogTitle>
           </DialogHeader>
 
           {selectedJob && (
-            <div className="space-y-6">
+            <div className="space-y-4 flex-1 overflow-y-auto pr-2">
               {isEditing && (
                 <div>
                   <label className="text-sm font-medium mb-2 block">Job Title *</label>
@@ -410,7 +411,7 @@ export default function Jobs() {
               )}
 
               <div>
-                <h3 className="text-lg font-semibold mb-2">Description</h3>
+                <h3 className="text-base font-semibold mb-2">Description</h3>
                 {isEditing ? (
                   <Textarea
                     value={selectedJob.description || ''}
@@ -418,17 +419,19 @@ export default function Jobs() {
                       ...selectedJob,
                       description: e.target.value
                     })}
-                    className="min-h-[200px]"
+                    className="min-h-[150px] max-h-[200px] resize-y text-sm"
                   />
                 ) : (
-                  <div className="whitespace-pre-line text-gray-700">
-                    {selectedJob.description || 'No description provided'}
-                  </div>
+                  <ScrollArea className="h-[200px] border border-gray-200 rounded-md p-3">
+                    <div className="whitespace-pre-line text-gray-700 text-sm">
+                      {selectedJob.description || 'No description provided'}
+                    </div>
+                  </ScrollArea>
                 )}
               </div>
 
               <div>
-                <h3 className="text-lg font-semibold mb-2">Requirements</h3>
+                <h3 className="text-base font-semibold mb-2">Requirements</h3>
                 {isEditing ? (
                   <Textarea
                     value={selectedJob.requirements?.join("\n") || ''}
@@ -436,33 +439,41 @@ export default function Jobs() {
                       ...selectedJob,
                       requirements: e.target.value.split("\n").filter(r => r.trim())
                     })}
-                    className="min-h-[200px]"
+                    className="min-h-[150px] max-h-[200px] resize-y text-sm"
                     placeholder="Enter requirements, one per line"
                   />
                 ) : (
-                  <ul className="list-disc pl-6 space-y-2">
-                    {selectedJob.requirements && selectedJob.requirements.length > 0 ? (
-                      selectedJob.requirements.map((req, index) => (
-                        <li key={index} className="text-gray-700">{req}</li>
-                      ))
-                    ) : (
-                      <li className="text-gray-500 italic">No requirements specified</li>
-                    )}
-                  </ul>
+                  <ScrollArea className="h-[200px] border border-gray-200 rounded-md p-3">
+                    <ul className="list-disc pl-5 space-y-1">
+                      {selectedJob.requirements && selectedJob.requirements.length > 0 ? (
+                        selectedJob.requirements.map((req, index) => (
+                          <li key={index} className="text-gray-700 text-sm">{req}</li>
+                        ))
+                      ) : (
+                        <li className="text-gray-500 italic text-sm">No requirements specified</li>
+                      )}
+                    </ul>
+                  </ScrollArea>
                 )}
               </div>
 
-              <div className="flex justify-end space-x-2 pt-4">
+            </div>
+          )}
+          <div className="flex justify-end space-x-2 pt-4 border-t flex-shrink-0">
+            {selectedJob && (
+              <>
                 {isEditing ? (
                   <>
                     <Button
                       variant="outline"
+                      size="sm"
                       onClick={() => setIsEditing(false)}
                     >
                       Cancel
                     </Button>
                     <Button
                       className="bg-blue-500 hover:bg-blue-600"
+                      size="sm"
                       onClick={handleSaveEdit}
                     >
                       Save Changes
@@ -472,21 +483,23 @@ export default function Jobs() {
                   <>
                     <Button
                       variant="outline"
+                      size="sm"
                       onClick={handleEdit}
                     >
                       Edit
                     </Button>
                     <Button
                       variant="destructive"
+                      size="sm"
                       onClick={handleDelete}
                     >
                       Delete
                     </Button>
                   </>
                 )}
-              </div>
-            </div>
-          )}
+              </>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

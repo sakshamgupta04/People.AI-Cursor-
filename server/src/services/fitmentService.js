@@ -48,6 +48,7 @@ export const calculateDatasetScore = (data) => {
 };
 
 export const scaleDatasetScore = (rawScore, category) => {
+    // Experienced: dataset 70, Big5 30; Fresher/Inexperienced: dataset 30, Big5 70
     return category === 'Experienced' ? (rawScore / 100) * 70 : (rawScore / 100) * 30;
 };
 
@@ -73,6 +74,7 @@ export const calculateBig5Score = (big5Data, category) => {
         N: toBucket(N, [1.0, 0.75, 0.50, 0.25])
     };
 
+    // Big5 weight: 30 for Experienced, 70 for Fresher/Inexperienced
     const weightPerTrait = (category === 'Experienced' ? 30 : 70) / 5;
     const total = Object.values(scores).reduce((sum, v) => sum + v * weightPerTrait, 0);
     return { trait_scores: scores, total_score: total, weight_per_trait: weightPerTrait };

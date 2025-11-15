@@ -1,5 +1,5 @@
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 
 interface PersonalityScores {
@@ -15,7 +15,7 @@ interface PersonalityPieChartProps {
 }
 
 export default function PersonalityPieChart({ scores }: PersonalityPieChartProps) {
-  const data = [
+  const baseData = [
     { name: "Extroversion", value: scores.extraversion, color: "#8B5CF6" }, // Purple
     { name: "Agreeableness", value: scores.agreeableness, color: "#10B981" }, // Green
     { name: "Openness", value: scores.openness, color: "#3B82F6" }, // Blue
@@ -23,12 +23,39 @@ export default function PersonalityPieChart({ scores }: PersonalityPieChartProps
     { name: "Conscientiousness", value: scores.conscientiousness, color: "#EC4899" }, // Pink
   ];
 
+  const [animatedData, setAnimatedData] = useState(
+    baseData.map((d) => ({ ...d, value: 0 }))
+  );
+
+  useEffect(() => {
+    // Animate slice values from 0 up to their actual scores
+    const start = performance.now();
+    const duration = 900;
+
+    const animate = (time: number) => {
+      const t = Math.min((time - start) / duration, 1);
+      const easeOutCubic = (x: number) => 1 - Math.pow(1 - x, 3);
+      const eased = easeOutCubic(t);
+
+      setAnimatedData(
+        baseData.map((d) => ({
+          ...d,
+          value: d.value * eased,
+        }))
+      );
+
+      if (t < 1) requestAnimationFrame(animate);
+    };
+
+    requestAnimationFrame(animate);
+  }, [scores.extraversion, scores.agreeableness, scores.openness, scores.neuroticism, scores.conscientiousness]);
+
   return (
     <div className="w-full h-full">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
-            data={data}
+            data={animatedData}
             cx="50%"
             cy="50%"
             labelLine={false}
@@ -38,8 +65,12 @@ export default function PersonalityPieChart({ scores }: PersonalityPieChartProps
             dataKey="value"
             label={({ value }) => `${value}%`}
             paddingAngle={2}
+            isAnimationActive={true}
+            animationBegin={0}
+            animationDuration={800}
+            animationEasing="ease-out"
           >
-            {data.map((entry, index) => (
+            {animatedData.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={entry.color} strokeWidth={2} />
             ))}
           </Pie>

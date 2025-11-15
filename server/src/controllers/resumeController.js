@@ -1,97 +1,132 @@
 import { supabase } from '../config/supabase.js';
 import { calculateOverallFitment } from '../services/fitmentService.js';
-import { retentionScorer } from '../services/retentionService.js';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Upload file to Supabase Storage
-const uploadFileToStorage = async (file) => {
-  console.log('Starting file upload:', file.originalname);
+// Upload file to Supabase Storage using candidate ID
+// This function uploads files to the 'resumes' bucket with path: ${candidateId}/${file.name}
+const uploadFileToStorage = async (file, candidateId) => {
+  console.log('[uploadFileToStorage] Starting file upload:', {
+    originalName: file.originalname,
+    candidateId: candidateId,
+    size: file.size,
+    mimeType: file.mimetype
+  });
 
   try {
     if (!file || !file.path) {
       throw new Error('No file or file path provided');
     }
 
-    const fileExt = path.extname(file.originalname);
-    const fileName = `${uuidv4()}${fileExt}`;
-    const filePath = `resumes/${fileName}`;
+    if (!candidateId) {
+      throw new Error('Candidate ID is required for file upload');
+    }
 
-    console.log('Preparing to upload file to Supabase:', {
+    // Sanitize filename to remove special characters
+    const sanitizedFileName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const filePath = `${candidateId}/${sanitizedFileName}`;
+
+    console.log('[uploadFileToStorage] Preparing to upload file to Supabase:', {
       originalName: file.originalname,
+      sanitizedFileName: sanitizedFileName,
       tempPath: file.path,
       size: file.size,
       mimeType: file.mimetype,
-      destinationPath: filePath
+      destinationPath: filePath,
+      bucket: 'resumes'
     });
 
-    // Note: Bucket 'resume' should be created manually in Supabase dashboard
-    console.log('Assuming bucket "resume" exists (create it manually in Supabase dashboard if not)');
+    // Note: Bucket 'resumes' should be created manually in Supabase dashboard
+    console.log('[uploadFileToStorage] Assuming bucket "resumes" exists (create it manually in Supabase dashboard if not)');
 
     // Read the file as a buffer
-    console.log('Reading file from disk...');
+    console.log('[uploadFileToStorage] Reading file from disk...');
     const fileBuffer = fs.readFileSync(file.path);
 
     if (!fileBuffer || fileBuffer.length === 0) {
       throw new Error('File is empty or could not be read');
     }
 
-    console.log('Uploading file to Supabase...');
+    console.log('[uploadFileToStorage] Uploading file to Supabase Storage...');
+    // Upload with upsert: true to overwrite existing files
     const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('resume')
+      .from('resumes')
       .upload(filePath, fileBuffer, {
         cacheControl: '3600',
-        upsert: false,
+        upsert: true, // Overwrite existing file if it exists
         contentType: file.mimetype,
         duplex: 'half'
       });
 
     if (uploadError) {
-      console.error('Error uploading file to Supabase:', uploadError);
+      console.error('[uploadFileToStorage] Error uploading file to Supabase:', {
+        error: uploadError,
+        message: uploadError.message,
+        statusCode: uploadError.statusCode
+      });
 
       // Provide specific error messages for common issues
-      if (uploadError.message.includes('Bucket not found')) {
-        throw new Error('Storage bucket "resume" not found. Please create it in your Supabase dashboard under Storage.');
+      if (uploadError.message && uploadError.message.includes('Bucket not found')) {
+        throw new Error('Storage bucket "resumes" not found. Please create it in your Supabase dashboard under Storage.');
       }
-      if (uploadError.message.includes('row-level security policy')) {
+      if (uploadError.message && uploadError.message.includes('row-level security policy')) {
         throw new Error('Storage permissions error. Please check your Supabase RLS policies or use a service role key instead of anon key.');
       }
+      if (uploadError.message && uploadError.message.includes('The resource already exists')) {
+        // This shouldn't happen with upsert: true, but handle it just in case
+        console.warn('[uploadFileToStorage] File already exists, but upsert should handle this');
+      }
 
-      throw new Error(`File upload failed: ${uploadError.message}`);
+      throw new Error(`File upload failed: ${uploadError.message || 'Unknown error'}`);
     }
 
-    console.log('File uploaded successfully, getting public URL...');
+    console.log('[uploadFileToStorage] File uploaded successfully, getting public URL...');
+    // Get public URL
     const { data: { publicUrl } } = supabase.storage
-      .from('resume')
+      .from('resumes')
       .getPublicUrl(filePath);
+
+    if (!publicUrl) {
+      throw new Error('Failed to get public URL for uploaded file');
+    }
+
+    console.log('[uploadFileToStorage] Public URL retrieved:', publicUrl);
 
     // Clean up the temporary file
     try {
-      console.log('Cleaning up temporary file...');
+      console.log('[uploadFileToStorage] Cleaning up temporary file...');
       fs.unlinkSync(file.path);
-      console.log('Temporary file removed');
+      console.log('[uploadFileToStorage] Temporary file removed successfully');
     } catch (cleanupError) {
-      console.error('Error cleaning up temporary file:', cleanupError);
+      console.error('[uploadFileToStorage] Error cleaning up temporary file:', cleanupError);
       // Don't fail the request if cleanup fails
     }
 
     const result = {
       original_filename: file.originalname,
       file_path: filePath,
-      file_url: publicUrl,
+      resume_url: publicUrl, // This is the public URL we'll save to database
       file_size: file.size,
       mime_type: file.mimetype,
       uploaded_at: new Date().toISOString()
     };
 
-    console.log('File upload completed successfully:', result);
+    console.log('[uploadFileToStorage] File upload completed successfully:', {
+      original_filename: result.original_filename,
+      file_path: result.file_path,
+      resume_url: result.resume_url,
+      file_size: result.file_size,
+      mime_type: result.mime_type
+    });
+
     return result;
   } catch (error) {
-    console.error('Error in file upload process:', {
+    console.error('[uploadFileToStorage] Error in file upload process:', {
       error: error.message,
       stack: error.stack,
+      candidateId: candidateId,
       file: file ? {
         originalname: file.originalname,
         path: file.path,
@@ -171,42 +206,44 @@ export const searchResumes = async (req, res) => {
 export const getResumeById = async (req, res) => {
   try {
     const { id } = req.params;
+    console.log(`[getResumeById] Fetching resume with ID: ${id}`);
+
     const { data, error } = await supabase
       .from('resumes')
       .select('*')
       .eq('id', id)
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error(`[getResumeById] Error fetching resume:`, error);
+      throw error;
+    }
+
     if (!data) {
+      console.warn(`[getResumeById] Resume not found for ID: ${id}`);
       return res.status(404).json({ success: false, error: 'Resume not found' });
     }
+
+    console.log(`[getResumeById] Resume found:`, {
+      id: data.id,
+      name: data.name,
+      email: data.email,
+      resume_url: data.resume_url,
+      file_url: data.file_url,
+      file_path: data.file_path
+    });
 
     // Get API base URL from app.locals
     const apiBaseUrl = req.app.locals.API_BASE_URL || 'http://localhost:5000';
 
-    // Add full file URL
-    data.file_url = data.file_path ? `${apiBaseUrl}/resumes/${data.id}/file` : null;
-
-    // Ensure retention_analysis JSONB is properly serialized
-    if (data.retention_analysis && typeof data.retention_analysis === 'object') {
-      // Already an object, keep as is
-    } else if (data.retention_analysis && typeof data.retention_analysis === 'string') {
-      // Try to parse if it's a string
-      try {
-        data.retention_analysis = JSON.parse(data.retention_analysis);
-      } catch (e) {
-        console.warn('Failed to parse retention_analysis JSONB:', e);
-      }
+    // Prefer resume_url (Supabase Storage public URL) over constructed file_url
+    // Only construct file_url if resume_url is not available
+    if (!data.resume_url && data.file_path) {
+      data.file_url = `${apiBaseUrl}/resumes/${data.id}/file`;
+    } else if (data.resume_url) {
+      // If resume_url exists, also set it as file_url for backward compatibility
+      data.file_url = data.resume_url;
     }
-
-    // Log retention data for debugging
-    console.log(`[getResumeById] Resume ${id} retention data:`, {
-      has_retention_analysis: !!data.retention_analysis,
-      retention_score: data.retention_score,
-      retention_risk: data.retention_risk,
-      has_component_scores: !!(data.retention_stability_score || data.retention_personality_score || data.retention_engagement_score || data.retention_fitment_factor)
-    });
 
     res.json({ success: true, data });
   } catch (error) {
@@ -271,38 +308,21 @@ export const createResume = async (req, res) => {
       }
     }
 
-    // Handle file upload if present (save locally for now)
-    if (req.file) {
-      console.log('Processing file upload to local storage...');
-      try {
-        const localFileAbsolute = req.file.path; // e.g., server/uploads/filename.ext
-        const fileName = path.basename(localFileAbsolute);
-        const relativePath = `uploads/${fileName}`; // store relative to server root
-
-        resumeData.original_filename = req.file.originalname;
-        resumeData.file_path = relativePath;
-        resumeData.file_url = `/api/resumes/temp/${fileName}`; // will be overridden to id-based URL after insert
-        resumeData.file_size = req.file.size;
-        resumeData.mime_type = req.file.mimetype;
-      } catch (error) {
-        console.error('Error saving file locally:', {
-          error: error.message,
-          stack: error.stack,
-          file: req.file ? {
-            originalname: req.file.originalname,
-            path: req.file.path,
-            size: req.file.size
-          } : 'No file info'
-        });
-        return res.status(500).json({
-          success: false,
-          error: 'Failed to save file locally',
-          message: error.message,
-          details: error.message
-        });
-      }
+    // Note: File upload will be handled AFTER inserting the resume to get the candidate ID
+    // We'll store file metadata temporarily for later use
+    const fileToUpload = req.file;
+    if (fileToUpload) {
+      console.log('[createResume] File will be uploaded after resume creation:', {
+        originalname: fileToUpload.originalname,
+        size: fileToUpload.size,
+        mimetype: fileToUpload.mimetype
+      });
+      // Store file metadata but don't set file_path/file_url yet
+      resumeData.original_filename = fileToUpload.originalname;
+      resumeData.file_size = fileToUpload.size;
+      resumeData.mime_type = fileToUpload.mimetype;
     } else {
-      console.log('No file uploaded with the request');
+      console.log('[createResume] No file uploaded with the request');
     }
 
     // Map and validate resume data to match database schema
@@ -371,22 +391,11 @@ export const createResume = async (req, res) => {
       is_jk: Boolean(resumeData.is_jk || resumeData.State_JK || false),
       best_fit_for: resumeData.best_fit_for || resumeData.Best_Fit_For || null,
 
-      // Job-specific fitment score from Gemini (preserve if job_id exists)
-      // If job_id is present, use Gemini's job-specific fitment_score
-      // Otherwise, it will be calculated generically later
-      // Ensure scores are numbers, not strings
-      ...(resumeData.job_id && resumeData.fitment_score && {
-        fitment_score: Number(resumeData.fitment_score),
-        profile_score: resumeData.profile_score ? Number(resumeData.profile_score) : Number(resumeData.fitment_score)
-      }),
-
-      // Job association - links resume to specific job position for evaluation
+      // Job association - links resume to specific job position for display/metadata
       ...(resumeData.job_id && { job_id: resumeData.job_id }),
 
-      // File info (if uploaded)
+      // File info (if uploaded) - file_path and resume_url will be set after upload
       ...(resumeData.original_filename && { original_filename: resumeData.original_filename }),
-      ...(resumeData.file_path && { file_path: resumeData.file_path }),
-      ...(resumeData.file_url && { file_url: resumeData.file_url }),
       ...(resumeData.file_size && { file_size: resumeData.file_size }),
       ...(resumeData.mime_type && { mime_type: resumeData.mime_type }),
       personality_analysis_completed: false
@@ -501,24 +510,71 @@ export const createResume = async (req, res) => {
       throw new Error('No data returned from database after insert');
     }
 
-    console.log('Resume created successfully:', JSON.stringify(insertedData[0], null, 2));
+    const candidateId = insertedData[0].id;
+    console.log('[createResume] Resume created successfully with ID:', candidateId);
 
-    // Get API base URL from app.locals
-    const apiBaseUrl = req.app.locals.API_BASE_URL || 'http://localhost:5000';
+    // If file was uploaded, now upload it to Supabase Storage using the candidate ID
+    let uploadResult = null;
+    if (fileToUpload && candidateId) {
+      try {
+        console.log('[createResume] Uploading file to Supabase Storage...');
+        uploadResult = await uploadFileToStorage(fileToUpload, candidateId);
 
-    // Add file URL to the response
+        // Update the resume record with resume_url and file_path
+        console.log('[createResume] Updating resume record with resume_url...');
+        const { data: updatedData, error: updateError } = await supabase
+          .from('resumes')
+          .update({
+            resume_url: uploadResult.resume_url,
+            file_path: uploadResult.file_path,
+            file_url: uploadResult.resume_url // Keep file_url for backward compatibility
+          })
+          .eq('id', candidateId)
+          .select();
+
+        if (updateError) {
+          console.error('[createResume] Error updating resume with resume_url:', updateError);
+          // Don't fail the request, but log the error
+          // The resume was created successfully, just the file URL update failed
+        } else {
+          console.log('[createResume] Resume updated with resume_url:', uploadResult.resume_url);
+          // Update insertedData with the new resume_url
+          insertedData[0].resume_url = uploadResult.resume_url;
+          insertedData[0].file_path = uploadResult.file_path;
+          insertedData[0].file_url = uploadResult.resume_url;
+        }
+      } catch (uploadError) {
+        console.error('[createResume] Error uploading file to Supabase Storage:', {
+          error: uploadError.message,
+          stack: uploadError.stack
+        });
+        // Don't fail the request if file upload fails
+        // The resume was created successfully, just the file upload failed
+        // Return error in response but with success status
+      }
+    }
+
+    console.log('[createResume] Resume creation process completed:', JSON.stringify(insertedData[0], null, 2));
+
+    // Prepare response data
     const responseData = {
       ...insertedData[0],
-      file_url: insertedData[0].file_path
-        ? `${apiBaseUrl}/resumes/${insertedData[0].id}/file`
-        : null
+      resume_url: insertedData[0].resume_url || null,
+      file_url: insertedData[0].resume_url || insertedData[0].file_url || null
     };
 
-    res.status(201).json({
+    // If file upload failed, include error in response
+    const response = {
       success: true,
-      message: 'Resume created successfully',
+      message: 'Resume created successfully' + (uploadResult ? ' and file uploaded to Supabase Storage' : ''),
       data: responseData
-    });
+    };
+
+    if (fileToUpload && !uploadResult) {
+      response.warning = 'Resume created but file upload failed. Please upload the file again.';
+    }
+
+    res.status(201).json(response);
   } catch (error) {
     console.error('Unexpected error in createResume:', {
       error: error.message,
@@ -716,22 +772,8 @@ export const updatePersonalityTestResults = async (req, res) => {
     const personalityScore = Math.round(fitment.big5_score);
     const candidateCategory = fitment.category;
 
-    let overall;
-    if (hasJobSpecificScore) {
-      // For job-specific evaluations, preserve the Gemini-calculated fitment_score
-      // and only add personality component (which is job-agnostic)
-      console.log('[PersonalityTest] Preserving job-specific fitment_score:', record.fitment_score);
-
-      // Keep the job-specific fitment_score as base, add personality component
-      // Personality contributes 10-20% to overall fitment
-      const personalityAdjustment = fitment.big5_score * 0.15; // 15% weight for personality
-      overall = Math.min(100, Math.max(0, record.fitment_score + personalityAdjustment));
-
-      console.log('[PersonalityTest] Job-specific score preserved. Base:', record.fitment_score, 'Personality adjustment:', personalityAdjustment, 'Final:', overall);
-    } else {
-      // For generic evaluations (no job_id), use standard calculation
-      overall = fitment.overall_fitment_score;
-    }
+    // Always use the ML-based overall fitment score (dataset + Big5) for this candidate
+    const overall = fitment.overall_fitment_score;
 
     // Normalize candidate_type to Title Case among allowed values
     const allowedTypes = new Set(['Experienced', 'Intermediate', 'Fresher']);
@@ -746,52 +788,13 @@ export const updatePersonalityTestResults = async (req, res) => {
       : 'Fresher';
     const candidateType = allowedTypes.has(normalizedType) ? normalizedType : 'Fresher';
 
-    // Calculate retention risk after fitment calculation
-    console.log('[RetentionAnalysis] Calculating retention risk for:', record.email);
-    const candidateDataForRetention = {
-      ...record,
-      number_of_unique_designations: record.number_of_unique_designations ?? record.number_of_jobs,
-      workshops: record.workshops_count,
-      trainings: record.trainings_count,
-      total_papers: record.research_papers_count,
-      total_patents: record.patents_count,
-      achievements: record.achievements_count,
-      fitment_score: overall
-    };
-
-    const big5ScoresForRetention = {
-      conscientiousness: scores.conscientiousness,
-      agreeableness: scores.agreeableness,
-      neuroticism: scores.neuroticism,
-      extraversion: scores.extraversion,
-      openness: scores.openness
-    };
-
-    const retentionAnalysis = retentionScorer.calculateRetentionRisk(
-      candidateDataForRetention,
-      overall,
-      big5ScoresForRetention,
-      candidateType
-    );
-
-    console.log('[RetentionAnalysis] Retention score:', retentionAnalysis.retention_score, 'Risk:', retentionAnalysis.retention_risk);
-
     const { data: updated, error: updError } = await supabase
       .from('resumes')
       .update({
         fitment_score: overall,
         profile_score: Math.round(overall),
         personality_score: personalityScore,
-        candidate_type: candidateType,
-        retention_score: retentionAnalysis.retention_score,
-        retention_risk: retentionAnalysis.retention_risk,
-        retention_analysis: retentionAnalysis,
-        // Store component scores separately for easier querying
-        retention_stability_score: retentionAnalysis.component_scores.stability,
-        retention_personality_score: retentionAnalysis.component_scores.personality,
-        retention_engagement_score: retentionAnalysis.component_scores.engagement,
-        retention_fitment_factor: retentionAnalysis.component_scores.fitment_factor,
-        retention_institution_quality: retentionAnalysis.component_scores.institution_quality || null
+        candidate_type: candidateType
       })
       .eq('email', email.toLowerCase().trim())
       .select();
@@ -805,10 +808,10 @@ export const updatePersonalityTestResults = async (req, res) => {
       });
     }
 
-    console.log('Successfully updated personality test results, fitment, and retention analysis:', updated?.[0] || record);
+    console.log('Successfully updated personality test results and fitment score:', updated?.[0] || record);
     res.status(200).json({
       success: true,
-      message: 'Personality test results updated, fitment and retention analysis computed successfully',
+      message: 'Personality test results updated and fitment score computed successfully',
       data: updated?.[0] || record
     });
   } catch (error) {

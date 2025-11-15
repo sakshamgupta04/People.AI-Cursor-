@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import axios from "axios";
 import { toast } from "@/components/ui/use-toast";
-import { getApiUrl } from "@/config/api.config";
+import { apiConfig, getApiUrl } from "@/config/api.config";
 
 // API client with error handling
 const apiClient = {
@@ -69,7 +69,9 @@ export interface UserProfile {
   best_fit_for?: string;
   longevity_years?: number;
   candidate_type?: boolean | string | null;
+  personality_score?: number;
   file_url?: string;
+  resume_url?: string;
 }
 
 const API_BASE_URL = 'http://localhost:5000/api';
@@ -122,13 +124,42 @@ const mapResumeToUserProfile = (resume: any): UserProfile => {
     phone: resume.phone || '',
     address: resume.address || '',
     summary: resume.summary || '',
+    file_url: resume.file_url || null,
+    resume_url: resume.resume_url || resume.file_url || null,
     best_fit_for: resume.best_fit_for || '',
     created_at: resume.created_at || new Date().toISOString(),
     fitment_score: resume.fitment_score || 0,
     skills: formatSkills(resume.skills),
     candidate_type: resume.candidate_type,
-    file_url: resume.file_url,
+    personality_score: resume.personality_score || undefined,
   };
+};
+
+// Frontend helper to ensure we always show Fresher / Inexperienced / Experienced
+const deriveCandidateTypeLabel = (user: UserProfile): string => {
+  const candidateType = user.candidate_type;
+
+  // Backward compatibility for old boolean storage
+  if (candidateType === true) return 'Experienced';
+  if (candidateType === false) return 'Fresher';
+
+  if (typeof candidateType === 'string' && candidateType.trim()) {
+    const normalized = candidateType.trim().toLowerCase();
+    if (normalized.includes('experienced')) return 'Experienced';
+    if (normalized.includes('inexperienced')) return 'Inexperienced';
+    if (normalized.includes('fresher')) return 'Fresher';
+  }
+
+  // Fallback: derive from longevity_years if available
+  const ly = typeof user.longevity_years === 'number' ? user.longevity_years : undefined;
+  if (ly !== undefined) {
+    if (ly >= 5) return 'Experienced';
+    if (ly > 1) return 'Inexperienced';
+    return 'Fresher';
+  }
+
+  // Default
+  return 'Fresher';
 };
 
 const PersonalityBar = ({
@@ -213,6 +244,28 @@ export default function Users() {
     }
   };
 
+  const handleDeleteUser = async (user: UserProfile) => {
+    const confirmed = window.confirm(`Delete candidate ${user.name}? This cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      const deleteUrl = `${apiConfig.baseUrl}${apiConfig.endpoints.users}/${user.id}`;
+      await axios.delete(deleteUrl);
+      toast({
+        title: "Candidate deleted",
+        description: `${user.name} has been removed.`,
+      });
+      await fetchUsers();
+    } catch (err: any) {
+      console.error("Error deleting candidate:", err);
+      toast({
+        title: "Failed to delete candidate",
+        description: err.response?.data?.message || err.message || "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Check for selectedId in URL query params
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
@@ -270,7 +323,7 @@ export default function Users() {
                 <TableHead>Candidate</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Type</TableHead>
-                <TableHead>Suitable For</TableHead>
+                <TableHead>Applied For</TableHead>
                 <TableHead>Score</TableHead>
                 <TableHead>Fitment Status</TableHead>
                 <TableHead>Actions</TableHead>
@@ -308,31 +361,7 @@ export default function Users() {
                     <div className="text-sm text-gray-500">{user.phone || 'No phone'}</div>
                   </TableCell>
                   <TableCell>
-                    {(() => {
-                      const candidateType = user.candidate_type;
-
-                      // Backward compatibility for old boolean storage
-                      if (candidateType === true) return <div className="text-sm text-gray-900">Experienced</div>;
-                      if (candidateType === false) return <div className="text-sm text-gray-900">Fresher</div>;
-
-                      if (candidateType === null || candidateType === undefined) {
-                        return <div className="text-sm text-gray-900">Not specified</div>;
-                      }
-
-                      if (typeof candidateType === 'string') {
-                        const normalized = candidateType.trim();
-                        if (!normalized) return <div className="text-sm text-gray-900">Not specified</div>;
-                        const titleCased = normalized
-                          .toLowerCase()
-                          .split(/\s+/)
-                          .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-                          .join(' ');
-                        return <div className="text-sm text-gray-900">{titleCased}</div>;
-                      }
-
-                      // Fallback
-                      return <div className="text-sm text-gray-900">Not specified</div>;
-                    })()}
+                    <div className="text-sm text-gray-900">{deriveCandidateTypeLabel(user)}</div>
                   </TableCell>
                   <TableCell>
                     {user.jobRole ? (
@@ -356,16 +385,29 @@ export default function Users() {
                     ) : 'N/A'}
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedUser(user);
-                      }}
-                    >
-                      View Details
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedUser(user);
+                        }}
+                      >
+                        View
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteUser(user);
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

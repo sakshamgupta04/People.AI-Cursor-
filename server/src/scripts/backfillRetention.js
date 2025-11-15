@@ -123,13 +123,7 @@ export async function backfillRetentionAnalysis() {
                         candidate_type: candidateType,
                         retention_score: retentionAnalysis.retention_score,
                         retention_risk: retentionAnalysis.retention_risk,
-                        retention_analysis: retentionAnalysis,
-                        // Store component scores separately for easier querying
-                        retention_stability_score: retentionAnalysis.component_scores.stability,
-                        retention_personality_score: retentionAnalysis.component_scores.personality,
-                        retention_engagement_score: retentionAnalysis.component_scores.engagement,
-                        retention_fitment_factor: retentionAnalysis.component_scores.fitment_factor,
-                        retention_institution_quality: retentionAnalysis.component_scores.institution_quality || null
+                        retention_analysis: retentionAnalysis
                     })
                     .eq('id', record.id);
 

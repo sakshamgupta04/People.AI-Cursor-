@@ -177,13 +177,9 @@ export default function ResumeUpload({ onResumeUploaded, onParsingStateChange }:
       // Convert file to base64 for sending to Gemini API
       const fileBase64 = await readFileAsBase64(file);
 
-      // Debug: Log the environment variables
-      console.log('Environment variables:', import.meta.env);
-      console.log('GEMINI_API_KEY exists:', 'VITE_GEMINI_API_KEY' in import.meta.env);
-
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) {
-        throw new Error('GEMINI_API_KEY is not set in environment variables');
+        throw new Error('Gemini API key is not configured. Please set VITE_GEMINI_API_KEY in your environment.');
       }
 
       // Get selected job details for job-specific evaluation
@@ -361,14 +357,35 @@ export default function ResumeUpload({ onResumeUploaded, onParsingStateChange }:
           })
         });
 
+        if (!response.ok) {
+          let errorDetail = '';
+          try {
+            const errJson = await response.json();
+            errorDetail = errJson.error?.message || JSON.stringify(errJson);
+          } catch {
+            errorDetail = await response.text();
+          }
+          throw new Error(`Gemini API request failed (${response.status}): ${errorDetail}`);
+        }
+
         const data = await response.json();
 
         if (data.error) {
-          throw new Error(data.error.message || "Failed to parse resume");
+          throw new Error(data.error.message || 'Gemini API returned an error while parsing the resume.');
+        }
+
+        if (!data.candidates || !Array.isArray(data.candidates) || !data.candidates[0]) {
+          throw new Error('Gemini API did not return any candidates. Please try again with a different resume.');
+        }
+
+        const firstCandidate = data.candidates[0];
+        const firstPart = firstCandidate.content?.parts?.[0];
+        if (!firstPart || typeof firstPart.text !== 'string') {
+          throw new Error('Gemini response did not contain the expected text output.');
         }
 
         // Extract JSON from the response
-        const parsedContent = data.candidates[0].content.parts[0].text;
+        const parsedContent = firstPart.text;
 
         // Try multiple regex patterns to extract the JSON
         const jsonMatches = [
@@ -485,20 +502,22 @@ export default function ResumeUpload({ onResumeUploaded, onParsingStateChange }:
         } catch (jsonError) {
           console.error("Error parsing JSON:", jsonError);
           console.error("Raw JSON text:", jsonText);
-          throw new Error("Invalid JSON response from API");
+          throw new Error("Gemini returned an invalid JSON payload while parsing the resume.");
         }
-      } catch (error) {
+      } catch (error: any) {
         clearInterval(interval);
-        setError("Failed to process resume. Please try again.");
+        const message = error?.message || 'Failed to process resume due to an unknown error.';
+        setError(message);
         setUploading(false);
         onParsingStateChange(false);
         console.error("Error parsing resume:", error);
       }
-    } catch (error) {
-      setError("Failed to process resume. Please try again.");
+    } catch (error: any) {
+      const message = error?.message || 'Failed to process resume due to an unexpected error.';
+      setError(message);
       setUploading(false);
       onParsingStateChange(false);
-      console.error("Error parsing resume:", error);
+      console.error("Error parsing resume (outer catch):", error);
     }
   };
 

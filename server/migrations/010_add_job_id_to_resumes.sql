@@ -21,3 +21,4 @@ CREATE INDEX IF NOT EXISTS idx_resumes_job_id ON resumes(job_id);
 -- Add comment
 COMMENT ON COLUMN resumes.job_id IS 'Foreign key to jobs table. Associates the resume with a specific job position for evaluation.';
 
+

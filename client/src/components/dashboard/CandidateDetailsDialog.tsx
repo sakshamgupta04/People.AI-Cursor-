@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import FitmentScoreGauge from "@/components/users/FitmentScoreGauge";
 import PersonalityPieChart from "@/components/users/PersonalityPieChart";
-import RetentionAnalysis from "@/components/users/RetentionAnalysis";
 import { Candidate } from "./CandidateScores";
 import axios from "axios";
 import { useEffect, useState } from "react";
@@ -33,15 +32,16 @@ type Profile = {
     conscientiousness: number;
   };
   file_url?: string;
+  resume_url?: string;
 };
 
 
 export default function CandidateDetailsDialog({ isOpen, onClose, candidate }: CandidateDetailsProps) {
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [retentionData, setRetentionData] = useState<any>(null);
+
   useEffect(() => {
     const load = async () => {
-      if (!candidate?.id) { setProfile(null); setRetentionData(null); return; }
+      if (!candidate?.id) { setProfile(null); return; }
       try {
         const res = await axios.get(`${apiConfig.baseUrl}/resumes/${candidate.id}`);
         const r = res.data?.data || res.data;
@@ -62,72 +62,9 @@ export default function CandidateDetailsDialog({ isOpen, onClose, candidate }: C
             conscientiousness: r.conscientiousness || 0,
           },
           file_url: r.file_url,
+          resume_url: r.resume_url || r.file_url,
         };
         setProfile(p);
-        // Extract retention data from resume
-        console.log('CandidateDetailsDialog - Resume data:', r);
-        if (r.retention_analysis) {
-          let parsedRetentionData = r.retention_analysis;
-          // Handle string format
-          if (typeof parsedRetentionData === 'string') {
-            try {
-              parsedRetentionData = JSON.parse(parsedRetentionData);
-            } catch (e) {
-              console.error('Error parsing retention_analysis:', e);
-              parsedRetentionData = null;
-            }
-          }
-
-          // Ensure we have a valid object
-          if (parsedRetentionData && typeof parsedRetentionData === 'object') {
-            // Ensure component scores are populated from database columns if missing in JSONB
-            if (!parsedRetentionData.component_scores) {
-              parsedRetentionData.component_scores = {};
-            }
-            parsedRetentionData.component_scores = {
-              stability: parsedRetentionData.component_scores.stability ?? r.retention_stability_score ?? 0,
-              personality: parsedRetentionData.component_scores.personality ?? r.retention_personality_score ?? 0,
-              engagement: parsedRetentionData.component_scores.engagement ?? r.retention_engagement_score ?? 0,
-              fitment_factor: parsedRetentionData.component_scores.fitment_factor ?? r.retention_fitment_factor ?? 0,
-              institution_quality: parsedRetentionData.component_scores.institution_quality ?? r.retention_institution_quality ?? undefined
-            };
-            // Ensure required fields exist
-            parsedRetentionData.retention_score = parsedRetentionData.retention_score ?? r.retention_score ?? 0;
-            parsedRetentionData.retention_risk = parsedRetentionData.retention_risk ?? (r.retention_risk || 'Medium');
-            parsedRetentionData.risk_flags = parsedRetentionData.risk_flags || [];
-            parsedRetentionData.flag_count = parsedRetentionData.flag_count ?? parsedRetentionData.risk_flags?.length ?? 0;
-            parsedRetentionData.insights = parsedRetentionData.insights || [];
-            console.log('CandidateDetailsDialog - Parsed retention data:', parsedRetentionData);
-            setRetentionData(parsedRetentionData);
-          } else {
-            console.warn('CandidateDetailsDialog - Invalid retention_analysis format');
-            setRetentionData(null);
-          }
-        } else if (r.retention_score !== null && r.retention_score !== undefined) {
-          // If retention_analysis is not stored, construct it from individual fields
-          // Use component scores from database columns if available
-          setRetentionData({
-            retention_score: r.retention_score,
-            retention_risk: r.retention_risk || 'Medium',
-            risk_description: r.retention_risk === 'Low'
-              ? 'Low Risk - High retention likelihood'
-              : r.retention_risk === 'High'
-                ? 'High Risk - Intervention recommended'
-                : 'Medium Risk - Monitor and support',
-            component_scores: {
-              stability: r.retention_stability_score ?? 0,
-              personality: r.retention_personality_score ?? 0,
-              engagement: r.retention_engagement_score ?? 0,
-              fitment_factor: r.retention_fitment_factor ?? 0,
-              institution_quality: r.retention_institution_quality ?? undefined
-            },
-            risk_flags: [],
-            flag_count: 0,
-            insights: []
-          });
-        } else {
-          setRetentionData(null);
-        }
       } catch {
         setProfile({
           id: candidate.id,
@@ -135,7 +72,7 @@ export default function CandidateDetailsDialog({ isOpen, onClose, candidate }: C
           email: candidate.email,
           score: candidate.fitment_score,
         });
-        setRetentionData(null);
+
       }
     };
     if (isOpen) load();
@@ -143,7 +80,9 @@ export default function CandidateDetailsDialog({ isOpen, onClose, candidate }: C
 
   if (!candidate) return null;
 
-  const resumeHref = profile?.id ? `${window.location.origin}/api/resumes/${profile.id}/file` : undefined;
+  // Prefer resume_url (Supabase Storage public URL) over file_url or API endpoint
+  const resumeHref = (profile as any)?.resume_url || profile?.file_url ||
+    (profile?.id ? `${window.location.origin}/api/resumes/${profile.id}/file` : undefined);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -208,10 +147,6 @@ export default function CandidateDetailsDialog({ isOpen, onClose, candidate }: C
                   </div>
                 </div>
               )}
-
-              <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-                <RetentionAnalysis retentionData={retentionData} />
-              </div>
             </div>
           </div>
         </ScrollArea>

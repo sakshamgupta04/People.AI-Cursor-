@@ -18,3 +18,4 @@ COMMENT ON TABLE jobs IS 'Stores job listings with title, description, requireme
 COMMENT ON COLUMN jobs.active IS 'Whether the job listing is currently active/visible';
 COMMENT ON COLUMN jobs.requirements IS 'Array of job requirement strings';
 
+

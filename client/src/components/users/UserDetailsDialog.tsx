@@ -5,34 +5,15 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import type { UserProfile } from "@/pages/Users";
 import PersonalityPieChart from "./PersonalityPieChart";
 import FitmentScoreGauge from "./FitmentScoreGauge";
+
 import { format } from "date-fns";
 import { toast } from "@/components/ui/use-toast";
+import { useEffect, useState } from "react";
+import axios from "axios";
 
-const RetentionRing = ({ label, value, color }: { label: string; value: number; color: string }) => {
-  const circumference = 2 * Math.PI * 42;
-  const offset = circumference - (value / 100) * circumference;
-  return (
-    <div className="flex flex-col items-center">
-      <svg width="100" height="100" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="42" stroke="#e5e7eb" strokeWidth="8" fill="none" />
-        <circle
-          cx="50"
-          cy="50"
-          r="42"
-          stroke={color}
-          strokeWidth="8"
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={`${circumference} ${circumference}`}
-          strokeDashoffset={offset}
-          transform="rotate(-90 50 50)"
-        />
-        <text x="50" y="52" textAnchor="middle" fontSize="14" fill="#111827">{value}%</text>
-      </svg>
-      <div className="mt-1 text-sm font-medium text-gray-800">{label}</div>
-    </div>
-  );
-};
+const API_BASE_URL = import.meta.env.PROD
+  ? import.meta.env.VITE_PROD_API_BASE_URL
+  : import.meta.env.VITE_DEV_API_BASE_URL || 'http://localhost:5000/api';
 
 interface UserDetailsDialogProps {
   isOpen: boolean;
@@ -41,12 +22,47 @@ interface UserDetailsDialogProps {
 }
 
 export default function UserDetailsDialog({ isOpen, onClose, user }: UserDetailsDialogProps) {
+  const [resumeUrl, setResumeUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadResumeData = async () => {
+      if (!user?.id || !isOpen) {
+        setResumeUrl(null);
+        return;
+      }
+
+      try {
+        console.log('[UserDetailsDialog] Loading resume data for user:', user.id);
+        const response = await axios.get(`${API_BASE_URL}/resumes/${user.id}`);
+        const resume = response.data?.data || response.data;
+
+        console.log('[UserDetailsDialog] Resume data loaded:', {
+          id: resume?.id,
+          resume_url: resume?.resume_url,
+          file_url: resume?.file_url
+        });
+
+        if (resume) {
+          // Extract resume URL (prefer resume_url over file_url)
+          const url = resume.resume_url || resume.file_url || null;
+          setResumeUrl(url);
+          console.log('[UserDetailsDialog] Resume URL set:', url);
+        }
+      } catch (error) {
+        console.error('[UserDetailsDialog] Error loading resume data:', error);
+        setResumeUrl(null);
+      }
+    };
+
+    loadResumeData();
+  }, [user?.id, isOpen]);
+
   if (!user) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[70vw] w-[95vw] p-0 h-[90vh] overflow-hidden">
-        <DialogHeader className="p-1 border-b sticky top-0 bg-white z-10">
+      <DialogContent className="max-w-[70vw] w-[95vw] p-0 h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader className="p-1 border-b sticky top-0 bg-white z-10 flex-shrink-0">
           <DialogTitle className="flex items-center space-x-2">
             <Button
               variant="ghost"
@@ -60,7 +76,7 @@ export default function UserDetailsDialog({ isOpen, onClose, user }: UserDetails
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="h-[calc(90vh-5rem)] w-full">
+        <ScrollArea className="flex-1 overflow-y-auto w-full">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-0 p-8">
             <div className="space-y-8">
               <div className="flex flex-col md:flex-row gap-6 items-center md:items-start">
@@ -108,20 +124,29 @@ export default function UserDetailsDialog({ isOpen, onClose, user }: UserDetails
 
                 <div className="mt-3">
                   <h4 className="font-medium text-center mb-1 text-lg">Score Breakdown</h4>
-                  <div className="space-y-1 px-5">
-                    <div className="flex justify-between">
-                      <span className="font-medium">Longevity Score:</span>
-                      <span>{(user.score * 0.3).toFixed(2)}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="font-medium">Achievements Score:</span>
-                      <span>{(user.score * 0.4).toFixed(2)}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="font-medium">Psychometric Score:</span>
-                      <span>{(user.score * 0.3).toFixed(2)}%</span>
-                    </div>
-                  </div>
+                  {(() => {
+                    const overall = user.fitment_score ?? user.score ?? 0;
+                    const rawType = typeof user.candidate_type === 'string' ? user.candidate_type.trim().toLowerCase() : '';
+                    const isExperienced = rawType === 'experienced';
+                    const datasetShare = isExperienced ? 70 : 30;
+                    const big5Share = 100 - datasetShare;
+
+                    const datasetPoints = (overall * datasetShare) / 100;
+                    const big5Points = (overall * big5Share) / 100;
+
+                    return (
+                      <div className="space-y-1 px-5">
+                        <div className="flex justify-between">
+                          <span className="font-medium">Resume Fit (Profile & Experience):</span>
+                          <span>{datasetPoints.toFixed(1)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="font-medium">Personality Fit (Big5):</span>
+                          <span>{big5Points.toFixed(1)}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -153,47 +178,40 @@ export default function UserDetailsDialog({ isOpen, onClose, user }: UserDetails
                       <span>Conscientiousness</span>
                       <span>{user.personalityScores.conscientiousness}%</span>
                     </div>
-
                   </div>
                 </div>
               )}
-
-              {/* Retention Analysis */}
-              <div className="bg-white rounded-lg border border-gray-200 p-2 shadow-sm space-y-3">
-                <h4 className="text-2xl font-semibold text-center">Retention Analysis</h4>
-                <div className="grid grid-cols-3 gap-6 place-items-center">
-                  <div className="text-center">
-                    <div className="text-sm text-gray-500 mb-2">4 weeks</div>
-                    <RetentionRing label="Possible" value={80} color="#f59e0b" />
-                  </div>
-                  <div className="text-center">
-                    <div className="text-sm text-gray-500 mb-2">8 weeks</div>
-                    <RetentionRing label="Likely" value={88} color="#22c55e" />
-                  </div>
-                  <div className="text-center">
-                    <div className="text-sm text-gray-500 mb-2">12 weeks</div>
-                    <RetentionRing label="Yes" value={96} color="#16a34a" />
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </ScrollArea>
-        <div className="p-4 border-t bg-white flex justify-center">
+
+        {/* View Resume Button - Always visible at bottom */}
+        <div className="p-4 border-t bg-white flex justify-center items-center flex-shrink-0">
           <Button
             onClick={() => {
-              const base = window.location.origin;
-              if (user.id) {
-                const url = `${base}/api/resumes/${user.id}/file`;
+              // Use resumeUrl from state (fetched from API) or fallback to user props
+              const urlToOpen = resumeUrl || (user as any).resume_url || user.file_url;
+
+              console.log('[UserDetailsDialog] View Resume button clicked:', {
+                resumeUrlFromState: resumeUrl,
+                resumeUrlFromUser: (user as any).resume_url,
+                fileUrlFromUser: user.file_url,
+                finalUrl: urlToOpen,
+                userId: user.id
+              });
+
+              if (urlToOpen) {
+                // If it's already a full URL (starts with http), use it directly
+                const url = urlToOpen.startsWith('http')
+                  ? urlToOpen
+                  : urlToOpen.startsWith('/')
+                    ? `${window.location.origin}${urlToOpen}`
+                    : `${window.location.origin}/${urlToOpen}`;
+
+                console.log('[UserDetailsDialog] Opening resume URL in new tab:', url);
                 window.open(url, '_blank', 'noopener,noreferrer');
-                return;
-              }
-              if (user.file_url) {
-                const resumeUrl = user.file_url.startsWith('http')
-                  ? user.file_url.replace('/api/api/', '/api/')
-                  : `${base}${user.file_url.startsWith('/') ? '' : '/'}${user.file_url}`;
-                window.open(resumeUrl, '_blank', 'noopener,noreferrer');
               } else {
+                console.warn('[UserDetailsDialog] No resume URL available for user:', user.id);
                 toast({
                   title: "Resume not available",
                   description: "This user doesn't have a resume uploaded.",
@@ -201,10 +219,12 @@ export default function UserDetailsDialog({ isOpen, onClose, user }: UserDetails
                 });
               }
             }}
-            className="w-full max-w-md bg-blue-500 hover:bg-blue-600 text-white"
-            disabled={!user.id && !user.file_url}
+            variant="default"
+            size="lg"
+            className="w-full max-w-md bg-blue-500 hover:bg-blue-600 text-white disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed disabled:hover:bg-gray-300"
+            disabled={!resumeUrl && !(user as any).resume_url && !user.file_url}
           >
-            {user.id || user.file_url ? "View Resume" : "No Resume Available"}
+            {resumeUrl || (user as any).resume_url || user.file_url ? "View Resume" : "No Resume Available"}
           </Button>
         </div>
       </DialogContent>

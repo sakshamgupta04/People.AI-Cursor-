@@ -21,3 +21,4 @@ CREATE INDEX IF NOT EXISTS idx_resumes_retention_stability ON resumes(retention_
 CREATE INDEX IF NOT EXISTS idx_resumes_retention_personality ON resumes(retention_personality_score);
 CREATE INDEX IF NOT EXISTS idx_resumes_retention_engagement ON resumes(retention_engagement_score);
 
+
