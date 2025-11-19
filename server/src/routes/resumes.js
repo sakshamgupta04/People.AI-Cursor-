@@ -10,7 +10,8 @@ import {
   deleteResume, 
   searchResumes,
   getResumeFile,
-  updatePersonalityTestResults
+  updatePersonalityTestResults,
+  getRetentionInsights
 } from '../controllers/resumeController.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -106,7 +107,17 @@ router.options('/personality-test', (req, res) => {
 // PATCH /api/resumes/personality-test - Update personality test results by email
 router.patch('/personality-test', updatePersonalityTestResults);
 
-// GET /api/resumes/:id - Get a specific resume by ID
+// GET /api/resumes/:id/retention-insights - Get AI-generated retention insights
+// IMPORTANT: This must be before /:id route to avoid route conflicts
+router.get('/:id/retention-insights', (req, res, next) => {
+  console.log('[Route] Matched retention-insights route for ID:', req.params.id);
+  getRetentionInsights(req, res, next);
+});
+
+// GET /api/resumes/:id/file - Get the resume file for download (before generic :id route)
+router.get('/:id/file', getResumeFile);
+
+// GET /api/resumes/:id - Get a specific resume by ID (must be last)
 router.get('/:id', getResumeById);
 
 // POST /api/resumes - Create a new resume with optional file upload
@@ -121,9 +132,6 @@ router.put('/:id', updateResume);
 
 // DELETE /api/resumes/:id - Delete a resume
 router.delete('/:id', deleteResume);
-
-// GET /api/resumes/:id/file - Get the resume file for download
-router.get('/:id/file', getResumeFile);
 
 // Legacy route for backward compatibility
 router.post('/upload', upload.single('file'), createResume);

@@ -172,7 +172,7 @@ export default function CandidateScores({ candidates, onViewUser }: CandidateSco
                 <p className="text-sm text-gray-500">{candidate.email}</p>
               </div>
               <div
-                className={`text-lg font-semibold ${candidate.fitment_score >= 60
+                className={`text-lg font-semibold ${candidate.fitment_score >= 65
                   ? "text-green-600"
                   : "text-yellow-600"
                   }`}
@@ -184,7 +184,7 @@ export default function CandidateScores({ candidates, onViewUser }: CandidateSco
             {/* Progress Bar */}
             <div className="mt-2 w-full rounded-full h-2.5 bg-gray-100">
               <div
-                className={`h-2.5 rounded-full ${candidate.fitment_score >= 60
+                className={`h-2.5 rounded-full ${candidate.fitment_score >= 65
                   ? "bg-green-500"
                   : "bg-yellow-500"
                   }`}

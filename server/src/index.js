@@ -8,6 +8,8 @@ import resumeRoutes from './routes/resumes.js';
 import criteriaRoutes from './routes/criteria.js';
 import jobRoutes from './routes/jobs.js';
 import emailRoutes from './routes/email.js';
+import retentionRoutes from './routes/retention.js';
+import { loadPeerGroupsFromFile } from './utils/loadPeerGroups.js';
 
 // Load environment variables
 dotenv.config();
@@ -83,12 +85,17 @@ app.use((req, res, next) => {
 // Add API base URL to app locals for use in routes
 app.locals.API_BASE_URL = process.env.API_BASE_URL || `http://localhost:${PORT}`;
 
+// Load peer groups for retention scoring (if available)
+console.log('Loading peer groups for retention scoring...');
+loadPeerGroupsFromFile();
+
 // API Routes
 app.use('/api/interviews', interviewRoutes);
 app.use('/api/resumes', resumeRoutes);
 app.use('/api/criteria', criteriaRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/email', emailRoutes);
+app.use('/api/retention', retentionRoutes);
 
 // Serve static files from uploads directory
 app.use('/uploads', express.static(uploadsDir));

@@ -1,5 +1,7 @@
 import { supabase } from '../config/supabase.js';
-import { calculateOverallFitment } from '../services/fitmentService.js';
+import { calculateOverallFitment, calculateDatasetScore } from '../services/fitmentService.js';
+import { retentionScorer } from '../services/retentionService.js';
+import { generateRetentionInsight } from '../services/retentionInsightsService.js';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
@@ -401,6 +403,34 @@ export const createResume = async (req, res) => {
       personality_analysis_completed: false
     };
 
+    // Calculate dataset score (resume evaluation score before Big5)
+    // This is the raw score out of 100 based on resume data only
+    try {
+      const candidateDataForDataset = {
+        longevity_years: mappedResumeData.longevity_years || 0,
+        average_experience: mappedResumeData.average_experience || 0,
+        workshops_count: mappedResumeData.workshops_count || 0,
+        trainings_count: mappedResumeData.trainings_count || 0,
+        research_papers_count: mappedResumeData.research_papers_count || 0,
+        patents_count: mappedResumeData.patents_count || 0,
+        achievements_count: mappedResumeData.achievements_count || 0,
+        books_count: mappedResumeData.books_count || 0,
+        is_jk: mappedResumeData.is_jk || false,
+        number_of_jobs: mappedResumeData.number_of_jobs || 0,
+        ug_institute: mappedResumeData.ug_institute || null,
+        pg_institute: mappedResumeData.pg_institute || null,
+        phd_institute: mappedResumeData.phd_institute || null
+      };
+
+      const datasetScore = calculateDatasetScore(candidateDataForDataset);
+      mappedResumeData.dataset_score = Math.round(datasetScore * 100) / 100;
+      console.log('[createResume] Calculated dataset_score:', mappedResumeData.dataset_score);
+    } catch (error) {
+      console.warn('[createResume] Error calculating dataset_score:', error);
+      // Continue without dataset_score if calculation fails
+      mappedResumeData.dataset_score = null;
+    }
+
     // Validate required fields
     if (!mappedResumeData.name || !mappedResumeData.email) {
       return res.status(400).json({
@@ -450,7 +480,7 @@ export const createResume = async (req, res) => {
       if (['average_experience', 'fitment_score', 'profile_score', 'retention_score',
         'retention_stability_score', 'retention_personality_score',
         'retention_engagement_score', 'retention_fitment_factor',
-        'retention_institution_quality'].includes(key)) {
+        'retention_institution_quality', 'dataset_score'].includes(key)) {
         return; // These can have decimals
       }
 
@@ -788,30 +818,91 @@ export const updatePersonalityTestResults = async (req, res) => {
       : 'Fresher';
     const candidateType = allowedTypes.has(normalizedType) ? normalizedType : 'Fresher';
 
+    // Calculate retention risk analysis
+    console.log('[PersonalityTest] Calculating retention risk for:', record.email);
+
+    // Prepare candidate data for retention calculation
+    const candidateDataForRetention = {
+      longevity_years: record.longevity_years || 0,
+      number_of_unique_designations: record.number_of_unique_designations || record.number_of_jobs || 1,
+      average_experience: record.average_experience || record.longevity_years || 1,
+      workshops: record.workshops_count || record.workshops || 0,
+      trainings: record.trainings_count || record.trainings || 0,
+      total_papers: record.research_papers_count || record.total_papers || 0,
+      total_patents: record.patents_count || record.total_patents || 0,
+      achievements: record.achievements_count || record.achievements || 0,
+      fitment_score: overall,
+      UG_Tier: record.ug_tier || 3,
+      PG_Tier: record.pg_tier || 3,
+      category: candidateType,
+      candidate_type: candidateType
+    };
+
+    // Prepare Big5 scores for retention calculation
+    const big5ScoresForRetention = {
+      conscientiousness: scores.conscientiousness,
+      agreeableness: scores.agreeableness,
+      neuroticism: scores.neuroticism,
+      extroversion: scores.extraversion,
+      openness: scores.openness
+    };
+
+    // Calculate retention risk
+    const retentionAnalysis = retentionScorer.calculateRetentionRisk(
+      candidateDataForRetention,
+      overall,
+      big5ScoresForRetention,
+      candidateType,
+      null, // peerGroup - will be auto-determined
+      record.id // candidateId
+    );
+
+    console.log('[PersonalityTest] Retention analysis:', {
+      retention_score: retentionAnalysis.retention_score,
+      retention_risk: retentionAnalysis.retention_risk,
+      peer_group: retentionAnalysis.peer_group
+    });
+
+    // Update database with fitment and retention data
+    // Note: dataset_score is NOT updated here - it's only set when resume is created
+    // fitment_score stores the overall score (dataset + Big5), profile_score is rounded for UI
+    const updatePayload = {
+      fitment_score: overall,
+      profile_score: Math.round(overall),
+      personality_score: personalityScore,
+      candidate_type: candidateType,
+      // Retention scores
+      retention_score: retentionAnalysis.retention_score,
+      retention_risk: retentionAnalysis.retention_risk,
+      retention_analysis: retentionAnalysis,
+      // Component scores (individual columns)
+      retention_stability_score: retentionAnalysis.component_scores.stability,
+      retention_personality_score: retentionAnalysis.component_scores.personality,
+      retention_engagement_score: retentionAnalysis.component_scores.engagement,
+      retention_fitment_factor: retentionAnalysis.component_scores.fitment_factor,
+      retention_academic_tier_score: retentionAnalysis.component_scores.tier_score,
+      retention_peer_comp_score: retentionAnalysis.component_scores.peer_comparison
+    };
+
     const { data: updated, error: updError } = await supabase
       .from('resumes')
-      .update({
-        fitment_score: overall,
-        profile_score: Math.round(overall),
-        personality_score: personalityScore,
-        candidate_type: candidateType
-      })
+      .update(updatePayload)
       .eq('email', email.toLowerCase().trim())
       .select();
 
     if (updError) {
-      console.error('Error updating fitment fields:', updError);
+      console.error('Error updating fitment and retention fields:', updError);
       return res.status(500).json({
         success: false,
         error: 'Database operation failed',
-        message: updError.message || 'Failed to update fitment fields'
+        message: updError.message || 'Failed to update fitment and retention fields'
       });
     }
 
-    console.log('Successfully updated personality test results and fitment score:', updated?.[0] || record);
+    console.log('Successfully updated personality test results, fitment score, and retention analysis:', updated?.[0] || record);
     res.status(200).json({
       success: true,
-      message: 'Personality test results updated and fitment score computed successfully',
+      message: 'Personality test results updated, fitment score computed, and retention analysis completed successfully',
       data: updated?.[0] || record
     });
   } catch (error) {
@@ -820,6 +911,85 @@ export const updatePersonalityTestResults = async (req, res) => {
       success: false,
       error: 'Internal server error',
       message: error.message || 'An unexpected error occurred'
+    });
+  }
+};
+
+// Get retention insights for a candidate
+export const getRetentionInsights = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`[getRetentionInsights] ===== NEW REQUEST =====`);
+    console.log(`[getRetentionInsights] Fetching retention insights for resume ID: ${id}`);
+    console.log(`[getRetentionInsights] Request URL: ${req.originalUrl}`);
+
+    // Get resume data including retention analysis
+    const { data, error } = await supabase
+      .from('resumes')
+      .select('retention_score, retention_risk, retention_analysis')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      console.error(`[getRetentionInsights] Error fetching resume:`, error);
+      throw error;
+    }
+
+    if (!data) {
+      return res.status(404).json({ success: false, error: 'Resume not found' });
+    }
+
+    // Check if retention data exists
+    if (!data.retention_analysis && !data.retention_score) {
+      return res.status(404).json({
+        success: false,
+        error: 'Retention analysis not available for this candidate'
+      });
+    }
+
+    // Parse retention_analysis if it's a string
+    let retentionAnalysis = data.retention_analysis;
+    if (typeof retentionAnalysis === 'string') {
+      try {
+        retentionAnalysis = JSON.parse(retentionAnalysis);
+      } catch (e) {
+        console.error('[getRetentionInsights] Error parsing retention_analysis:', e);
+        retentionAnalysis = null;
+      }
+    }
+
+    // Prepare retention data for Gemini
+    const retentionData = {
+      retention_score: data.retention_score || 0,
+      retention_risk: data.retention_risk || 'Medium',
+      component_scores: retentionAnalysis?.component_scores || {},
+      risk_flags: retentionAnalysis?.risk_flags || []
+    };
+
+    // Get Gemini API key from environment
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+
+    // Generate insight using Gemini (always fresh, no caching)
+    console.log(`[getRetentionInsights] Calling Gemini API with retention data:`, {
+      retention_score: retentionData.retention_score,
+      retention_risk: retentionData.retention_risk,
+      has_api_key: !!geminiApiKey
+    });
+
+    const insight = await generateRetentionInsight(retentionData, geminiApiKey);
+
+    console.log(`[getRetentionInsights] Generated insight: "${insight}"`);
+
+    res.json({
+      success: true,
+      insight: insight,
+      timestamp: new Date().toISOString() // Add timestamp to ensure freshness
+    });
+  } catch (error) {
+    console.error('Error getting retention insights:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to generate retention insights'
     });
   }
 };

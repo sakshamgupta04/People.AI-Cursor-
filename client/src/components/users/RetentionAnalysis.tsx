@@ -226,8 +226,14 @@ export default function RetentionAnalysis({ retentionData }: RetentionAnalysisPr
                       {analysisData.component_scores.fitment_factor !== undefined && (
                         <div className="text-gray-600">• Fitment Factor: {Number(analysisData.component_scores.fitment_factor).toFixed(1)}</div>
                       )}
-                      {analysisData.component_scores.institution_quality !== undefined && (
-                        <div className="text-gray-600">• Institution Quality: {Number(analysisData.component_scores.institution_quality).toFixed(1)}</div>
+                      {analysisData.component_scores.tier_score !== undefined && (
+                        <div className="text-gray-600">• Academic Tier: {Number(analysisData.component_scores.tier_score).toFixed(1)}</div>
+                      )}
+                      {analysisData.component_scores.peer_comparison !== undefined && analysisData.component_scores.peer_comparison !== null && (
+                        <div className="text-gray-600">• Peer Comparison: {Number(analysisData.component_scores.peer_comparison).toFixed(1)}</div>
+                      )}
+                      {analysisData.peer_group && (
+                        <div className="text-gray-500 text-xs mt-1">Peer Group: {analysisData.peer_group}</div>
                       )}
                     </div>
                   </div>

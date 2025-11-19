@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import FitmentScoreGauge from "@/components/users/FitmentScoreGauge";
 import PersonalityPieChart from "@/components/users/PersonalityPieChart";
+import RetentionAnalysis from "@/components/users/RetentionAnalysis";
 import type { UserProfile } from "./Users";
 
 const API_BASE_URL = import.meta.env.PROD
@@ -42,6 +43,10 @@ const mapResumeToUserProfile = (resume: any): UserProfile => ({
     file_url: resume.file_url,
     resume_url: resume.resume_url || resume.file_url,
     personality_score: resume.personality_score || undefined,
+    dataset_score: resume.dataset_score || undefined,
+    retention_score: resume.retention_score || undefined,
+    retention_risk: resume.retention_risk || undefined,
+    retention_analysis: resume.retention_analysis || undefined,
 });
 
 
@@ -210,27 +215,56 @@ export default function CandidateProfile() {
                                 <h4 className="font-medium text-center mb-1 text-lg">Score Breakdown</h4>
                                 {(() => {
                                     const overall = user.fitment_score ?? user.score ?? 0;
+                                    const datasetScore = user.dataset_score; // Raw dataset score (0-100) - stored in DB
+                                    
                                     // Determine candidate type similar to backend normalization
                                     const rawType = typeof user.candidate_type === 'string' ? user.candidate_type.trim().toLowerCase() : '';
                                     const isExperienced = rawType === 'experienced';
-                                    const datasetShare = isExperienced ? 70 : 30;
-                                    const big5Share = 100 - datasetShare;
-
-                                    const datasetPoints = (overall * datasetShare) / 100;
-                                    const big5Points = (overall * big5Share) / 100;
-
-                                    return (
-                                        <div className="space-y-1 px-5">
-                                            <div className="flex justify-between text-sm">
-                                                <span className="font-medium">Resume Fit (Profile & Experience):</span>
-                                                <span>{datasetPoints.toFixed(1)}</span>
+                                    
+                                    // If dataset_score is available, use actual scaled values
+                                    if (datasetScore !== undefined && datasetScore !== null && user.personality_score !== undefined) {
+                                        // Calculate scaled dataset score based on category
+                                        // Experienced: dataset 70%, Big5 30%
+                                        // Fresher/Intermediate: dataset 30%, Big5 70%
+                                        const datasetScaled = isExperienced 
+                                            ? (datasetScore / 100) * 70  // Experienced: 70% dataset
+                                            : (datasetScore / 100) * 30; // Fresher/Intermediate: 30% dataset
+                                        
+                                        // personality_score is already the scaled Big5 score
+                                        const big5Scaled = user.personality_score;
+                                        
+                                        return (
+                                            <div className="space-y-1 px-5">
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="font-medium">Resume Fit (Profile & Experience):</span>
+                                                    <span>{datasetScaled.toFixed(1)}</span>
+                                                </div>
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="font-medium">Personality Fit (Big5):</span>
+                                                    <span>{big5Scaled.toFixed(1)}</span>
+                                                </div>
                                             </div>
-                                            <div className="flex justify-between text-sm">
-                                                <span className="font-medium">Personality Fit (Big5):</span>
-                                                <span>{big5Points.toFixed(1)}</span>
+                                        );
+                                    } else {
+                                        // Fallback: calculate from overall score if dataset_score not available
+                                        const datasetShare = isExperienced ? 70 : 30;
+                                        const big5Share = 100 - datasetShare;
+                                        const datasetPoints = (overall * datasetShare) / 100;
+                                        const big5Points = (overall * big5Share) / 100;
+
+                                        return (
+                                            <div className="space-y-1 px-5">
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="font-medium">Resume Fit (Profile & Experience):</span>
+                                                    <span>{datasetPoints.toFixed(1)}</span>
+                                                </div>
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="font-medium">Personality Fit (Big5):</span>
+                                                    <span>{big5Points.toFixed(1)}</span>
+                                                </div>
                                             </div>
-                                        </div>
-                                    );
+                                        );
+                                    }
                                 })()}
                             </div>
                         </div>
@@ -245,7 +279,16 @@ export default function CandidateProfile() {
                             </div>
                         )}
 
-                        {/* Retention Analysis removed for retention-free view */}
+                        {/* Retention Analysis */}
+                        {user.retention_score !== undefined && (
+                            <RetentionAnalysis 
+                                retentionData={{
+                                    retention_score: user.retention_score,
+                                    retention_risk: user.retention_risk,
+                                    retention_analysis: user.retention_analysis
+                                }}
+                            />
+                        )}
                     </div>
                 </div>
             </ScrollArea>
